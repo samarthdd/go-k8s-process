@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
 	"github.com/k8-proxy/k8-go-comm/pkg/minio"
 	"github.com/k8-proxy/k8-go-comm/pkg/rabbitmq"
 	"github.com/streadway/amqp"
+
+	"github.com/k8-proxy/go-k8s-process/rebuildexec"
 
 	miniov7 "github.com/minio/minio-go/v7"
 )
@@ -20,8 +24,8 @@ var (
 	routingKey = "processing-request"
 	queueName  = "processing-request-queue"
 
-	clean_exchange   = "processing-outcome-exchange"
-	clean_routingKey = "processing-outcome-request"
+	clean_exchange   = "clean-exchange"
+	clean_routingKey = "clean-request"
 
 	inputMount                     = os.Getenv("INPUT_MOUNT")
 	adaptationRequestQueueHostname = os.Getenv("ADAPTATION_REQUEST_QUEUE_HOSTNAME")
@@ -55,19 +59,19 @@ func main() {
 	}
 
 	// Initiate a publisher on processing exchange
-	publisher, err = rabbitmq.NewQueuePublisher(connection, clean_exchange)
+	publisher, err = rabbitmq.NewQueuePublisher(connection, clean_exchange, amqp.ExchangeDirect)
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
 
 	// Start a consumer
-	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, queueName, exchange, routingKey)
+	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, queueName, exchange, amqp.ExchangeDirect, routingKey, amqp.Table{})
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
 	defer ch.Close()
 
-	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, true)
+	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
@@ -136,20 +140,42 @@ func processMessage(d amqp.Delivery) error {
 	os.Setenv("MessageBrokerUser", messagebrokeruser)
 	os.Setenv("MessageBrokerPassword", messagebrokerpassword)
 
-	cmd := exec.Command("dotnet", "Service.dll")
-	out, err := cmd.CombinedOutput()
+	//cmd := exec.Command("dotnet", "Service.dll")
+	//out, err := cmd.CombinedOutput()
+	//	if err != nil {
+	//log.Printf("File processing error : %s\n", err.Error())
+	//	return err
+	//	}
+	//	fmt.Printf("File processing output : %s\n", out)
+
+	f, err := getfile(sourcePresignedURL)
 	if err != nil {
-		log.Printf("File processing error : %s\n", err.Error())
+		log.Println("Minio download error")
 		return err
 	}
-	fmt.Printf("File processing output : %s\n", out)
+
+	var fn []byte
+	err = nil
+
+	fn, _, err = clirebuildprocess(f, fileID)
+	if err != nil {
+
+		log.Println("error rebuild ", err)
+		fn = []byte("error")
+
+	}
 
 	// Upload the source file to Minio and Get presigned URL
-	cleanPresignedURL, err := minio.UploadAndReturnURL(minioClient, cleanMinioBucket, output, time.Second*60*60*24)
+	//cleanPresignedURL, err := minio.UploadAndReturnURL(minioClient, cleanMinioBucket, output, time.Second*60*60*24)
+	//if err != nil {
+	//	return err
+	//}
+	fileid := fmt.Sprintf("rebuild-%s", fileID)
+	urlp, err := st(fn, fileid)
 	if err != nil {
-		return err
+		log.Println("Minio upload error")
 	}
-	d.Headers["clean-presigned-url"] = cleanPresignedURL.String()
+	d.Headers["clean-presigned-url"] = urlp
 
 	// Publish the details to Rabbit
 	fmt.Printf("%+v\n", d.Headers)
@@ -160,4 +186,65 @@ func processMessage(d amqp.Delivery) error {
 	}
 
 	return nil
+}
+
+func clirebuildprocess(f []byte, reqid string) ([]byte, []byte, error) {
+
+	fd := rebuildexec.New(f, reqid)
+	err := fd.Rebuild()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	report, err := fd.FileRreport()
+	if err != nil {
+		return nil, nil, err
+	}
+	file, err := fd.FileProcessed()
+
+	if err != nil {
+		return nil, nil, err
+
+	}
+	return file, report, nil
+}
+
+func getfile(url string) ([]byte, error) {
+
+	f := []byte{}
+	resp, err := http.Get(url)
+	if err != nil {
+		return f, err
+	}
+	defer resp.Body.Close()
+
+	f, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return f, err
+	}
+	return f, nil
+
+}
+
+func st(file []byte, filename string) (string, error) {
+
+	exist, err := minio.CheckIfBucketExists(minioClient, cleanMinioBucket)
+	if err != nil || !exist {
+		return "", err
+
+	}
+	_, errm := minio.UploadFileToMinio(minioClient, cleanMinioBucket, filename, bytes.NewReader(file))
+	if errm != nil {
+		return "", errm
+	}
+
+	expirein := time.Second * 60 * 2
+	urlx, err := minio.GetPresignedURLForObject(minioClient, cleanMinioBucket, filename, expirein)
+	if err != nil {
+		return "", err
+
+	}
+
+	return urlx.String(), nil
+
 }
