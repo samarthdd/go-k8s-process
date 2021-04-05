@@ -20,12 +20,13 @@ import (
 )
 
 var (
-	exchange   = "processing-exchange"
-	routingKey = "processing-request"
-	queueName  = "processing-request-queue"
+	ProcessingRequestExchange   = "processing-request-exchange"
+	ProcessingRequestRoutingKey = "processing-request"
+	ProcessingRequestQueueName  = "processing-request-queue"
 
-	clean_exchange   = "clean-exchange"
-	clean_routingKey = "clean-request"
+	ProcessingOutcomeExchange   = "processing-outcome-exchange"
+	ProcessingOutcomeRoutingKey = "processing-outcome"
+	ProcessingOutcomeQueueName  = "processing-outcome-queue"
 
 	inputMount                     = os.Getenv("INPUT_MOUNT")
 	adaptationRequestQueueHostname = os.Getenv("ADAPTATION_REQUEST_QUEUE_HOSTNAME")
@@ -59,13 +60,13 @@ func main() {
 	}
 
 	// Initiate a publisher on processing exchange
-	publisher, err = rabbitmq.NewQueuePublisher(connection, clean_exchange, amqp.ExchangeDirect)
+	publisher, err = rabbitmq.NewQueuePublisher(connection, ProcessingOutcomeExchange, amqp.ExchangeDirect)
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
 
 	// Start a consumer
-	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, queueName, exchange, amqp.ExchangeDirect, routingKey, amqp.Table{})
+	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
@@ -180,7 +181,7 @@ func processMessage(d amqp.Delivery) error {
 	// Publish the details to Rabbit
 	fmt.Printf("%+v\n", d.Headers)
 
-	err = rabbitmq.PublishMessage(publisher, clean_exchange, clean_routingKey, d.Headers, []byte(""))
+	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d.Headers, []byte(""))
 	if err != nil {
 		return err
 	}
