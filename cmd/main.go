@@ -22,11 +22,11 @@ import (
 var (
 	ProcessingRequestExchange   = "processing-request-exchange"
 	ProcessingRequestRoutingKey = "processing-request"
-	ProcessingRequestQueueName  = "processing-request-queue"
+	ProcessingRequestQueueName  = "processing-request"
 
 	ProcessingOutcomeExchange   = "processing-outcome-exchange"
 	ProcessingOutcomeRoutingKey = "processing-outcome"
-	ProcessingOutcomeQueueName  = "processing-outcome-queue"
+	ProcessingOutcomeQueueName  = "processing-outcome"
 
 	inputMount                     = os.Getenv("INPUT_MOUNT")
 	adaptationRequestQueueHostname = os.Getenv("ADAPTATION_REQUEST_QUEUE_HOSTNAME")
@@ -141,14 +141,6 @@ func processMessage(d amqp.Delivery) error {
 	os.Setenv("MessageBrokerUser", messagebrokeruser)
 	os.Setenv("MessageBrokerPassword", messagebrokerpassword)
 
-	//cmd := exec.Command("dotnet", "Service.dll")
-	//out, err := cmd.CombinedOutput()
-	//	if err != nil {
-	//log.Printf("File processing error : %s\n", err.Error())
-	//	return err
-	//	}
-	//	fmt.Printf("File processing output : %s\n", out)
-
 	f, err := getfile(sourcePresignedURL)
 	if err != nil {
 		log.Println("Minio download error")
@@ -156,9 +148,10 @@ func processMessage(d amqp.Delivery) error {
 	}
 
 	var fn []byte
+	var gwreport []byte
 	err = nil
 
-	fn, _, err = clirebuildprocess(f, fileID)
+	fn, gwreport, err = clirebuildprocess(f, fileID)
 	if err != nil {
 
 		log.Println("error rebuild ", err)
@@ -166,16 +159,20 @@ func processMessage(d amqp.Delivery) error {
 
 	}
 
-	// Upload the source file to Minio and Get presigned URL
-	//cleanPresignedURL, err := minio.UploadAndReturnURL(minioClient, cleanMinioBucket, output, time.Second*60*60*24)
-	//if err != nil {
-	//	return err
-	//}
 	fileid := fmt.Sprintf("rebuild-%s", fileID)
+	reportid := fmt.Sprintf("report-%s.xml", fileID)
 	urlp, err := st(fn, fileid)
 	if err != nil {
 		log.Println("Minio upload error")
 	}
+
+	urlr, err := st(gwreport, reportid)
+	if err != nil {
+		log.Println("Minio upload error")
+	}
+
+	log.Println("report presigned-url", urlr)
+
 	d.Headers["clean-presigned-url"] = urlp
 
 	// Publish the details to Rabbit
@@ -200,7 +197,9 @@ func clirebuildprocess(f []byte, reqid string) ([]byte, []byte, error) {
 	report, err := fd.FileRreport()
 	if err != nil {
 		return nil, nil, err
+
 	}
+
 	file, err := fd.FileProcessed()
 
 	if err != nil {
