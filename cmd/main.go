@@ -22,11 +22,11 @@ import (
 var (
 	ProcessingRequestExchange   = "processing-request-exchange"
 	ProcessingRequestRoutingKey = "processing-request"
-	ProcessingRequestQueueName  = "processing-request"
+	ProcessingRequestQueueName  = "processing-request-queue"
 
 	ProcessingOutcomeExchange   = "processing-outcome-exchange"
 	ProcessingOutcomeRoutingKey = "processing-outcome"
-	ProcessingOutcomeQueueName  = "processing-outcome"
+	ProcessingOutcomeQueueName  = "processing-outcome-queue"
 
 	inputMount                     = os.Getenv("INPUT_MOUNT")
 	adaptationRequestQueueHostname = os.Getenv("ADAPTATION_REQUEST_QUEUE_HOSTNAME")
