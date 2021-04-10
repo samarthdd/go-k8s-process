@@ -82,7 +82,7 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
-			err := processMessage(d)
+			err := ProcessMessage(d)
 			if err != nil {
 				log.Printf("Failed to process message: %v", err)
 			}
@@ -98,7 +98,7 @@ func main() {
 
 }
 
-func processMessage(d amqp.Delivery) error {
+func ProcessMessage(d amqp.Delivery) error {
 
 	if d.Headers["file-id"] == nil ||
 		d.Headers["source-presigned-url"] == nil {
