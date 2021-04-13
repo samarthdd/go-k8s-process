@@ -75,7 +75,11 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 ```
 docker logs <container name>
 ```
+# known issues
+
+the rebuild CLI have some problems working on alpine , maybe there is missing dependencies or directory structrure , so instead we use ubuntu base image  for the moment
 
 # Rebuild flow to implement
 
 ![new-rebuild-flow-v2](https://github.com/k8-proxy/go-k8s-infra/raw/main/diagram/go-k8s-infra.png)
+
