@@ -18,7 +18,7 @@ jobs:
           go-version: 1.16
 
       - name: Build
-        run: go build ./cmd
+        run: go build -o go-k8s-process ./cmd
 
       - name: Test
         run: go test ./...
