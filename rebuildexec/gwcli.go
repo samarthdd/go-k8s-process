@@ -18,7 +18,6 @@ const (
 	APP           = "glasswallCLI"
 	CONFIGINI     = "config.ini"
 	XMLCONFIG     = "config.xml"
-	PATH          = "./../dep"
 	INPUT         = "/tmp/glrebuild"
 	MANAGED       = "Managed"
 	NONCONFORMING = "NonConforming"
@@ -58,7 +57,6 @@ func New(f []byte, n, l string) GwRebuild {
 
 func (r *GwRebuild) Rebuild() error {
 	var err error
-	//r.path, err = os.MkdirTemp(INPUT, "gl")
 
 	path := fmt.Sprintf("%s/%s", r.path, r.FileName)
 	if err != nil {
@@ -115,29 +113,16 @@ func (r *GwRebuild) FileRreport() ([]byte, error) {
 }
 
 func (r *GwRebuild) exe() error {
-	envr := os.Getenv("IN_CONTAINER")
-	log.Println("in container", envr)
 
-	path, err := filepath.Abs(PATH)
-
-	if err != nil {
-		return err
-	}
-
-	if envr == "true" {
-		path = PATH[1:]
-	}
-	log.Println("path", path)
-
-	app := fmt.Sprintf("%s/%s", path, APP)
-	configini := fmt.Sprintf("%s/%s", path, CONFIGINI)
-	xmlconfig := fmt.Sprintf("%s/%s", path, XMLCONFIG)
+	app := os.Getenv("GWCLI")
+	configini := os.Getenv("INICONFIG")
+	xmlconfig := os.Getenv("XMLCONFIG")
 
 	tconfigini := fmt.Sprintf("%s/%s/%s", INPUT, r.Lastpath, CONFIGINI)
 	txmlconfig := fmt.Sprintf("%s/%s/%s", INPUT, r.Lastpath, XMLCONFIG)
 
 	cmd := exec.Command("cp", configini, tconfigini)
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
 		return err
 	}
@@ -150,18 +135,12 @@ func (r *GwRebuild) exe() error {
 
 	iniconf(tconfigini, r.Lastpath)
 
-	log.Println("path", app)
-	log.Println("path", configini)
-	log.Println("path", xmlconfig)
-
 	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, tconfigini, txmlconfig)
 
 	cmd = exec.Command("sh", "-c", args)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
-	log.Println(path)
-	//cmd.Dir = path
 	err = cmd.Run()
 	log.Println(string(out.Bytes()))
 	if err != nil {

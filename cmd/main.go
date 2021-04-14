@@ -84,13 +84,9 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
-<<<<<<< HEAD
-			err := ProcessMessage(d)
-=======
 			zlog.Info().Msg("received message from queue ")
 
-			err := processMessage(d)
->>>>>>> add logs and change Cli config location
+			err := ProcessMessage(d)
 			if err != nil {
 				zlog.Error().Err(err).Msg("Failed to process message")
 			}
@@ -143,7 +139,7 @@ func ProcessMessage(d amqp.Delivery) error {
 	os.Setenv("MessageBrokerUser", messagebrokeruser)
 	os.Setenv("MessageBrokerPassword", messagebrokerpassword)
 
-	f, err := getfile(sourcePresignedURL)
+	f, err := getFile(sourcePresignedURL)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("failed to download from Minio ")
 		return err
@@ -153,22 +149,22 @@ func ProcessMessage(d amqp.Delivery) error {
 	var gwreport []byte
 	err = nil
 
-	fn, gwreport, err = clirebuildprocess(f, fileID)
+	fn, gwreport, err = clirebuildProcess(f, fileID)
 	if err != nil {
 
 		zlog.Fatal().Err(err).Msg("failed to rebuild file")
-		fn = []byte("error")
+		fn = []byte("error : the  rebuild engine failed to rebuild file")
 
 	}
 
 	fileid := fmt.Sprintf("rebuild-%s", fileID)
 	reportid := fmt.Sprintf("report-%s.xml", fileID)
-	urlp, err := st(fn, fileid)
+	urlp, err := uploadMinio(fn, fileid)
 	if err != nil {
 		log.Println("Minio upload error")
 	}
 
-	_, err = st(gwreport, reportid)
+	_, err = uploadMinio(gwreport, reportid)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("failed to upload to Minio")
 	}
@@ -188,9 +184,9 @@ func ProcessMessage(d amqp.Delivery) error {
 	return nil
 }
 
-func clirebuildprocess(f []byte, reqid string) ([]byte, []byte, error) {
+func clirebuildProcess(f []byte, fileid string) ([]byte, []byte, error) {
 	l := rebuildexec.RandStringRunes(16)
-	fd := rebuildexec.New(f, reqid, l)
+	fd := rebuildexec.New(f, fileid, l)
 	err := fd.Rebuild()
 	if err != nil {
 		return nil, nil, err
@@ -216,7 +212,7 @@ func clirebuildprocess(f []byte, reqid string) ([]byte, []byte, error) {
 	return file, report, nil
 }
 
-func getfile(url string) ([]byte, error) {
+func getFile(url string) ([]byte, error) {
 
 	f := []byte{}
 	resp, err := http.Get(url)
@@ -233,7 +229,7 @@ func getfile(url string) ([]byte, error) {
 
 }
 
-func st(file []byte, filename string) (string, error) {
+func uploadMinio(file []byte, filename string) (string, error) {
 
 	exist, err := minio.CheckIfBucketExists(minioClient, cleanMinioBucket)
 	if err != nil || !exist {
