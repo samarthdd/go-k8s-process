@@ -1,6 +1,7 @@
 package main
 
 import (
+<<<<<<< HEAD
 	"log"
 	"testing"
 
@@ -209,4 +210,44 @@ func declareQueue(queueName string, channel wabbit.Channel) (wabbit.Queue, error
 			"noWait":     false,
 		},
 	)
+=======
+	"io/ioutil"
+	"log"
+	"testing"
+)
+
+func TestExec(t *testing.T) {
+	path := "/home/ibrahim/Desktop/demopdf/水.pdf"
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Println(err)
+
+		t.Error(err)
+	}
+
+	c, d, err := clirebuildprocess(b, "水.pdf")
+	if err != nil {
+		log.Println(err)
+		t.Error(err)
+
+	}
+
+	errf := ioutil.WriteFile("test.pdf", c, 0777)
+	if errf != nil {
+		log.Println(errf)
+
+		t.Error(errf)
+
+	}
+	errc := ioutil.WriteFile("test.pdf.xml", d, 0777)
+	if errc != nil {
+		log.Println(errc)
+
+		t.Error(errc)
+
+	}
+
+	//f.Clean()
+
+>>>>>>> add logs and change Cli config location
 }

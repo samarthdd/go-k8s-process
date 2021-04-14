@@ -10,26 +10,31 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/go-ini/ini"
 )
 
 const (
 	APP           = "glasswallCLI"
 	CONFIGINI     = "config.ini"
 	XMLCONFIG     = "config.xml"
-	PATH          = "./dep"
+	PATH          = "./../dep"
 	INPUT         = "/tmp/glrebuild"
 	MANAGED       = "Managed"
 	NONCONFORMING = "NonConforming"
+	INPUTKEY      = "inputLocation"
+	OUTPUTKEY     = "outputLocation"
+	SECTION       = "GWConfig"
 )
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-	os.Mkdir(INPUT, 0777)
+	os.MkdirAll(INPUT, 0777)
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-func randStringRunes(n int) string {
+func RandStringRunes(n int) string {
 	b := make([]rune, n)
 	for i := range b {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
@@ -40,17 +45,20 @@ func randStringRunes(n int) string {
 type GwRebuild struct {
 	File     []byte
 	FileName string
+	Lastpath string
 	path     string
 }
 
-func New(f []byte, n string) GwRebuild {
-	return GwRebuild{f, n, ""}
+func New(f []byte, n, l string) GwRebuild {
+	p := filepath.Join(INPUT, l)
+	os.MkdirAll(p, 0777)
+
+	return GwRebuild{f, n, l, p}
 }
 
 func (r *GwRebuild) Rebuild() error {
 	var err error
 	//r.path, err = os.MkdirTemp(INPUT, "gl")
-	r.path = INPUT
 
 	path := fmt.Sprintf("%s/%s", r.path, r.FileName)
 	if err != nil {
@@ -68,19 +76,9 @@ func (r *GwRebuild) Rebuild() error {
 	return nil
 }
 
-func (r *GwRebuild) clean() {
-	logm := fmt.Sprintf("%s/%s/%s.log", r.path, MANAGED, r.FileName)
-
-	logn := fmt.Sprintf("%s/%s/%s.log", r.path, NONCONFORMING, r.FileName)
-
-	fpath := fmt.Sprintf("%s/%s", r.path, r.FileName)
-
-	os.Remove(logm)
-
-	os.Remove(logn)
-
-	os.Remove(fpath)
-
+func (r *GwRebuild) Clean() error {
+	err := os.RemoveAll(r.path)
+	return err
 }
 
 func (r *GwRebuild) FileProcessed() ([]byte, error) {
@@ -93,12 +91,8 @@ func (r *GwRebuild) FileProcessed() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		os.Remove(pathNonconforming)
 
-	} else {
-		os.Remove(pathManaged)
 	}
-	r.clean()
 	return b, nil
 
 }
@@ -114,13 +108,8 @@ func (r *GwRebuild) FileRreport() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		os.Remove(pathNonconforming)
-
-	} else {
-		os.Remove(pathManaged)
 
 	}
-	r.clean()
 	return b, nil
 
 }
@@ -144,13 +133,30 @@ func (r *GwRebuild) exe() error {
 	configini := fmt.Sprintf("%s/%s", path, CONFIGINI)
 	xmlconfig := fmt.Sprintf("%s/%s", path, XMLCONFIG)
 
+	tconfigini := fmt.Sprintf("%s/%s/%s", INPUT, r.Lastpath, CONFIGINI)
+	txmlconfig := fmt.Sprintf("%s/%s/%s", INPUT, r.Lastpath, XMLCONFIG)
+
+	cmd := exec.Command("cp", configini, tconfigini)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	cmd = exec.Command("cp", xmlconfig, txmlconfig)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	iniconf(tconfigini, r.Lastpath)
+
 	log.Println("path", app)
 	log.Println("path", configini)
 	log.Println("path", xmlconfig)
 
-	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, configini, xmlconfig)
+	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, tconfigini, txmlconfig)
 
-	cmd := exec.Command("sh", "-c", args)
+	cmd = exec.Command("sh", "-c", args)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
@@ -163,4 +169,40 @@ func (r *GwRebuild) exe() error {
 	}
 
 	return nil
+}
+
+func iniconf(p, randpath string) error {
+	cfg, err := ini.Load(p)
+	if err != nil {
+		return fmt.Errorf("Fail to read ini file  %s", err)
+	}
+
+	sec := cfg.Section(SECTION)
+	err = inikey(sec, INPUTKEY, randpath)
+	if err != nil {
+		return err
+	}
+	err = inikey(sec, OUTPUTKEY, randpath)
+	if err != nil {
+		return err
+	}
+	err = cfg.SaveTo(p)
+	if err != nil {
+		return fmt.Errorf("Fail to save ini file : %s", err)
+
+	}
+	return nil
+
+}
+func inikey(s *ini.Section, keyname, randpath string) error {
+	ok := s.HasKey(keyname)
+	if !ok {
+		return fmt.Errorf("Fail to find %s key", keyname)
+	}
+	key := s.Key(keyname)
+	v := key.String()
+	v = filepath.Join(v, randpath)
+	key.SetValue(v)
+	return nil
+
 }

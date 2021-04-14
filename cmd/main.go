@@ -14,6 +14,8 @@ import (
 	"github.com/k8-proxy/k8-go-comm/pkg/rabbitmq"
 	"github.com/streadway/amqp"
 
+	zlog "github.com/rs/zerolog/log"
+
 	"github.com/k8-proxy/go-k8s-process/rebuildexec"
 
 	miniov7 "github.com/minio/minio-go/v7"
@@ -56,25 +58,25 @@ func main() {
 	// Get a connection
 	connection, err := rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
-		log.Fatalf("%s", err)
+		zlog.Fatal().Err(err).Msg("could not start rabbitmq connection ")
 	}
 
 	// Initiate a publisher on processing exchange
 	publisher, err = rabbitmq.NewQueuePublisher(connection, ProcessingOutcomeExchange, amqp.ExchangeDirect)
 	if err != nil {
-		log.Fatalf("%s", err)
+		zlog.Fatal().Err(err).Msg("could not start publisher ")
 	}
 
 	// Start a consumer
 	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
 	if err != nil {
-		log.Fatalf("%s", err)
+		zlog.Fatal().Err(err).Msg("could not start consumer ")
 	}
 	defer ch.Close()
 
 	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 	if err != nil {
-		log.Fatalf("%s", err)
+		zlog.Fatal().Err(err).Msg("could not start minio client ")
 	}
 
 	forever := make(chan bool)
@@ -82,18 +84,24 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
+<<<<<<< HEAD
 			err := ProcessMessage(d)
+=======
+			zlog.Info().Msg("received message from queue ")
+
+			err := processMessage(d)
+>>>>>>> add logs and change Cli config location
 			if err != nil {
-				log.Printf("Failed to process message: %v", err)
+				zlog.Error().Err(err).Msg("Failed to process message")
 			}
 
 			// Closing the channel to exit
-			log.Printf("File processed, closing the channel")
+			zlog.Info().Msg(" closing the channel")
 			close(forever)
 		}
 	}()
 
-	log.Printf("[*] Waiting for messages. To exit press CTRL+C")
+	log.Printf("Waiting for messages")
 	<-forever
 
 }
@@ -115,14 +123,8 @@ func ProcessMessage(d amqp.Delivery) error {
 	sourcePresignedURL := d.Headers["source-presigned-url"].(string)
 	rebuiltLocation := d.Headers["rebuilt-file-location"].(string)
 
-	log.Printf("Received a message for file: %s, sourcePresignedURL: %s, rebuiltLocation: %s", fileID, sourcePresignedURL, rebuiltLocation)
-
 	// Download the file to output file location
 	downloadPath := "/tmp/" + filepath.Base(rebuiltLocation)
-	err := minio.DownloadObject(sourcePresignedURL, downloadPath)
-	if err != nil {
-		return err
-	}
 
 	output := "/tmp/" + fileID
 
@@ -143,7 +145,7 @@ func ProcessMessage(d amqp.Delivery) error {
 
 	f, err := getfile(sourcePresignedURL)
 	if err != nil {
-		log.Println("Minio download error")
+		zlog.Fatal().Err(err).Msg("failed to download from Minio ")
 		return err
 	}
 
@@ -154,7 +156,7 @@ func ProcessMessage(d amqp.Delivery) error {
 	fn, gwreport, err = clirebuildprocess(f, fileID)
 	if err != nil {
 
-		log.Println("error rebuild ", err)
+		zlog.Fatal().Err(err).Msg("failed to rebuild file")
 		fn = []byte("error")
 
 	}
@@ -166,29 +168,29 @@ func ProcessMessage(d amqp.Delivery) error {
 		log.Println("Minio upload error")
 	}
 
-	urlr, err := st(gwreport, reportid)
+	_, err = st(gwreport, reportid)
 	if err != nil {
-		log.Println("Minio upload error")
+		zlog.Fatal().Err(err).Msg("failed to upload to Minio")
 	}
-
-	log.Println("report presigned-url", urlr)
 
 	d.Headers["clean-presigned-url"] = urlp
 
+	zlog.Info().Msg("file uploaded to minio successfully")
+
 	// Publish the details to Rabbit
-	fmt.Printf("%+v\n", d.Headers)
 
 	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d.Headers, []byte(""))
 	if err != nil {
 		return err
 	}
+	zlog.Info().Str("Exchange", ProcessingOutcomeExchange).Str("RoutingKey", ProcessingOutcomeRoutingKey).Msg("message published to queue ")
 
 	return nil
 }
 
 func clirebuildprocess(f []byte, reqid string) ([]byte, []byte, error) {
-
-	fd := rebuildexec.New(f, reqid)
+	l := rebuildexec.RandStringRunes(16)
+	fd := rebuildexec.New(f, reqid, l)
 	err := fd.Rebuild()
 	if err != nil {
 		return nil, nil, err
@@ -202,6 +204,11 @@ func clirebuildprocess(f []byte, reqid string) ([]byte, []byte, error) {
 
 	file, err := fd.FileProcessed()
 
+	if err != nil {
+		return nil, nil, err
+
+	}
+	err = fd.Clean()
 	if err != nil {
 		return nil, nil, err
 
