@@ -54,7 +54,7 @@ var (
 )
 
 func main() {
-       
+
 	// Get a connection
 	connection, err := rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
@@ -77,20 +77,6 @@ func main() {
 	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("could not start minio client ")
-	}
-
-	exist, err := minio.CheckIfBucketExists(minioClient, cleanMinioBucket)
-	if err != nil {
-		zlog.Error().Err(err).Msg("could not check if bucket exist")
-		return
-	}
-	if !exist {
-
-		err := minio.CreateNewBucket(minioClient, cleanMinioBucket)
-		if err != nil {
-			zlog.Error().Err(err).Msg("could not create minio bucket")
-			return
-		}
 	}
 
 	forever := make(chan bool)
