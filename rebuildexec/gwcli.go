@@ -26,12 +26,33 @@ const (
 	SECTION       = "GWConfig"
 )
 
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+type GwRebuild struct {
+	File     []byte
+	FileName string
+	Lastpath string
+	path     string
+}
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	os.MkdirAll(INPUT, 0777)
+	printVersion()
 }
 
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+func printVersion() {
+	app := os.Getenv("GWCLI")
+	args := fmt.Sprintf("%s -v", app)
+	cmd := exec.Command("sh", "-c", args)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	cmd.Run()
+
+	log.Printf("\033[32m GW rebuild SDK version : %s\n", string(out.Bytes()))
+
+}
 
 func RandStringRunes(n int) string {
 	b := make([]rune, n)
@@ -39,13 +60,6 @@ func RandStringRunes(n int) string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
-}
-
-type GwRebuild struct {
-	File     []byte
-	FileName string
-	Lastpath string
-	path     string
 }
 
 func New(f []byte, n, l string) GwRebuild {
