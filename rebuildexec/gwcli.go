@@ -10,8 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
-
-	"github.com/go-ini/ini"
 )
 
 const (
@@ -28,45 +26,24 @@ const (
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-type GwRebuild struct {
-	File     []byte
-	FileName string
-	Lastpath string
-	path     string
-}
-
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	os.MkdirAll(INPUT, 0777)
 	printVersion()
 }
 
-func printVersion() {
-	app := os.Getenv("GWCLI")
-	args := fmt.Sprintf("%s -v", app)
-	cmd := exec.Command("sh", "-c", args)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-
-	cmd.Run()
-
-	log.Printf("\033[32m GW rebuild SDK version : %s\n", string(out.Bytes()))
-
+type GwRebuild struct {
+	File     []byte
+	FileName string
+	RandDir  string
+	path     string
 }
 
-func RandStringRunes(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(b)
-}
+func New(file []byte, fileName, randDir string) GwRebuild {
+	rebuilPath := filepath.Join(INPUT, randDir)
+	os.MkdirAll(rebuilPath, 0777)
 
-func New(f []byte, n, l string) GwRebuild {
-	p := filepath.Join(INPUT, l)
-	os.MkdirAll(p, 0777)
-
-	return GwRebuild{f, n, l, p}
+	return GwRebuild{file, fileName, randDir, rebuilPath}
 }
 
 func (r *GwRebuild) Rebuild() error {
@@ -132,24 +109,24 @@ func (r *GwRebuild) exe() error {
 	configini := os.Getenv("INICONFIG")
 	xmlconfig := os.Getenv("XMLCONFIG")
 
-	tconfigini := fmt.Sprintf("%s/%s/%s", INPUT, r.Lastpath, CONFIGINI)
-	txmlconfig := fmt.Sprintf("%s/%s/%s", INPUT, r.Lastpath, XMLCONFIG)
+	randConfigini := fmt.Sprintf("%s/%s/%s", INPUT, r.RandDir, CONFIGINI)
+	randXmlconfig := fmt.Sprintf("%s/%s/%s", INPUT, r.RandDir, XMLCONFIG)
 
-	cmd := exec.Command("cp", configini, tconfigini)
+	cmd := exec.Command("cp", configini, randConfigini)
 	err := cmd.Run()
 	if err != nil {
 		return err
 	}
 
-	cmd = exec.Command("cp", xmlconfig, txmlconfig)
+	cmd = exec.Command("cp", xmlconfig, randXmlconfig)
 	err = cmd.Run()
 	if err != nil {
 		return err
 	}
 
-	iniconf(tconfigini, r.Lastpath)
+	iniconf(randConfigini, r.RandDir)
 
-	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, tconfigini, txmlconfig)
+	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, randConfigini, randXmlconfig)
 
 	cmd = exec.Command("sh", "-c", args)
 	var out bytes.Buffer
@@ -164,38 +141,23 @@ func (r *GwRebuild) exe() error {
 	return nil
 }
 
-func iniconf(p, randpath string) error {
-	cfg, err := ini.Load(p)
-	if err != nil {
-		return fmt.Errorf("Fail to read ini file  %s", err)
-	}
+func printVersion() {
+	app := os.Getenv("GWCLI")
+	args := fmt.Sprintf("%s -v", app)
+	cmd := exec.Command("sh", "-c", args)
+	var out bytes.Buffer
+	cmd.Stdout = &out
 
-	sec := cfg.Section(SECTION)
-	err = inikey(sec, INPUTKEY, randpath)
-	if err != nil {
-		return err
-	}
-	err = inikey(sec, OUTPUTKEY, randpath)
-	if err != nil {
-		return err
-	}
-	err = cfg.SaveTo(p)
-	if err != nil {
-		return fmt.Errorf("Fail to save ini file : %s", err)
+	cmd.Run()
 
-	}
-	return nil
+	log.Printf("\033[32m GW rebuild SDK version : %s\n", string(out.Bytes()))
 
 }
-func inikey(s *ini.Section, keyname, randpath string) error {
-	ok := s.HasKey(keyname)
-	if !ok {
-		return fmt.Errorf("Fail to find %s key", keyname)
-	}
-	key := s.Key(keyname)
-	v := key.String()
-	v = filepath.Join(v, randpath)
-	key.SetValue(v)
-	return nil
 
+func RandStringRunes(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }

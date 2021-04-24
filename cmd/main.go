@@ -58,25 +58,25 @@ func main() {
 	// Get a connection
 	connection, err := rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start rabbitmq connection ")
+		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connection ")
 	}
 
 	// Initiate a publisher on processing exchange
 	publisher, err = rabbitmq.NewQueuePublisher(connection, ProcessingOutcomeExchange, amqp.ExchangeDirect)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start publisher ")
+		zlog.Fatal().Err(err).Msg("error could not start rabbitmq publisher ")
 	}
 
 	// Start a consumer
 	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start consumer ")
+		zlog.Fatal().Err(err).Msg("error could not start rabbitmq consumer ")
 	}
 	defer ch.Close()
 
 	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start minio client ")
+		zlog.Fatal().Err(err).Msg("error could not start minio client ")
 	}
 
 	forever := make(chan bool)
@@ -88,7 +88,7 @@ func main() {
 
 			err := ProcessMessage(d)
 			if err != nil {
-				zlog.Error().Err(err).Msg("Failed to process message")
+				zlog.Error().Err(err).Msg("error Failed to process message")
 			}
 
 			// Closing the channel to exit
@@ -141,9 +141,10 @@ func ProcessMessage(d amqp.Delivery) error {
 
 	f, err := getFile(sourcePresignedURL)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("failed to download from Minio ")
-		return err
+		return fmt.Errorf("error failed to download from Minio:%s", err)
 	}
+
+	zlog.Info().Msg("file downloaded from minio successfully")
 
 	var fn []byte
 	var gwreport []byte
@@ -152,8 +153,11 @@ func ProcessMessage(d amqp.Delivery) error {
 	fn, gwreport, err = clirebuildProcess(f, fileID)
 	if err != nil {
 
-		zlog.Fatal().Err(err).Msg("failed to rebuild file")
+		zlog.Error().Err(err).Msg("error failed to rebuild file")
 		fn = []byte("error : the  rebuild engine failed to rebuild file")
+
+	} else {
+		zlog.Info().Msg("file rebuilt successfully ")
 
 	}
 
@@ -161,23 +165,26 @@ func ProcessMessage(d amqp.Delivery) error {
 	reportid := fmt.Sprintf("report-%s.xml", fileID)
 	urlp, err := uploadMinio(fn, fileid)
 	if err != nil {
-		log.Println("Minio upload error")
-	}
+		return fmt.Errorf("error failed to upload file to Minio :%s", err)
 
-	_, err = uploadMinio(gwreport, reportid)
-	if err != nil {
-		zlog.Fatal().Err(err).Msg("failed to upload to Minio")
+	}
+	zlog.Info().Msg("file uploaded to minio successfully")
+
+	if generateReport == "true" {
+		_, err = uploadMinio(gwreport, reportid)
+		if err != nil {
+			return fmt.Errorf("failed to upload report file to Minio :%s", err)
+		}
+		zlog.Info().Msg("report file uploaded to minio successfully")
 	}
 
 	d.Headers["clean-presigned-url"] = urlp
-
-	zlog.Info().Msg("file uploaded to minio successfully")
 
 	// Publish the details to Rabbit
 
 	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d.Headers, []byte(""))
 	if err != nil {
-		return err
+		return fmt.Errorf("error failed to publish message to the ProcessingOutcome queue :%s", err)
 	}
 	zlog.Info().Str("Exchange", ProcessingOutcomeExchange).Str("RoutingKey", ProcessingOutcomeRoutingKey).Msg("message published to queue ")
 
@@ -185,15 +192,18 @@ func ProcessMessage(d amqp.Delivery) error {
 }
 
 func clirebuildProcess(f []byte, fileid string) ([]byte, []byte, error) {
-	l := rebuildexec.RandStringRunes(16)
-	fd := rebuildexec.New(f, fileid, l)
+	randPath := rebuildexec.RandStringRunes(16)
+	fd := rebuildexec.New(f, fileid, randPath)
 	err := fd.Rebuild()
 	if err != nil {
+		err = fmt.Errorf("error rebuild function : %s", err)
 		return nil, nil, err
 	}
 
 	report, err := fd.FileRreport()
 	if err != nil {
+		err = fmt.Errorf("error rebuildexec fileRreport function : %s", err)
+
 		return nil, nil, err
 
 	}
@@ -201,11 +211,15 @@ func clirebuildProcess(f []byte, fileid string) ([]byte, []byte, error) {
 	file, err := fd.FileProcessed()
 
 	if err != nil {
+		err = fmt.Errorf("error rebuildexec FileProcessed function : %s", err)
+
 		return nil, nil, err
 
 	}
 	err = fd.Clean()
 	if err != nil {
+		err = fmt.Errorf("error rebuildexec Clean function : %s", err)
+
 		return nil, nil, err
 
 	}
@@ -217,6 +231,7 @@ func getFile(url string) ([]byte, error) {
 	f := []byte{}
 	resp, err := http.Get(url)
 	if err != nil {
+
 		return f, err
 	}
 	defer resp.Body.Close()
