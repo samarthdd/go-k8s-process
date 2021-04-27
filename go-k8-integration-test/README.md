@@ -15,5 +15,4 @@ make
 ![Test-flow]!(images/testflow.jpg)
 
 
-![image](.\image\image.png)
 
