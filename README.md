@@ -1,29 +1,29 @@
 <h1 align="center">go-k8s-process</h1>
 
 <p align="center">
-    <a href="https://github.com/haitham911/go-k8s-process/actions/workflows/build.yml">
-        <img src="https://github.com/haitham911/go-k8s-process/actions/workflows/build.yml/badge.svg"/>
+    <a href="https://github.com/k8-proxy/go-k8s-process/actions/workflows/build.yml">
+        <img src="https://github.com/k8-proxy/go-k8s-process/actions/workflows/build.yml/badge.svg"/>
     </a>
-    <a href="https://codecov.io/gh/haitham911/go-k8s-process">
-        <img src="https://codecov.io/gh/haitham911/go-k8s-process/branch/main/graph/badge.svg"/>
+    <a href="https://codecov.io/gh/k8-proxy/go-k8s-process">
+        <img src="https://codecov.io/gh/k8-proxy/go-k8s-process/branch/main/graph/badge.svg"/>
     </a>	    
-    <a href="https://goreportcard.com/report/github.com/haitham911/go-k8s-process">
-      <img src="https://goreportcard.com/badge/haitham911/go-k8s-process" alt="Go Report Card">
+    <a href="https://goreportcard.com/report/github.com/k8-proxy/go-k8s-process">
+      <img src="https://goreportcard.com/badge/k8-proxy/go-k8s-process" alt="Go Report Card">
     </a>
-	<a href="https://github.com/haitham911/go-k8s-process/pulls">
+	<a href="https://github.com/k8-proxy/go-k8s-process/pulls">
         <img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat" alt="Contributions welcome">
     </a>
     <a href="https://opensource.org/licenses/Apache-2.0">
         <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache License, Version 2.0">
     </a>
-    <a href="https://github.com/haitham911/go-k8s-process/releases/latest">
-        <img src="https://img.shields.io/github/release/haitham911/go-k8s-process.svg?style=flat"/>
+    <a href="https://github.com/k8-proxy/go-k8s-process/releases/latest">
+        <img src="https://img.shields.io/github/release/k8-proxy/go-k8s-process.svg?style=flat"/>
     </a>
 </p>
 
 # go-k8s-process
 
-This is the service that will process/rebuild the file, as per the projet defined in [this repo](https://github.com/haitham911/go-k8s-infra)
+This is the service that will process/rebuild the file, as per the projet defined in [this repo](https://github.com/k8-proxy/go-k8s-infra)
 These pods are controlled the rebuild pods controller.
 
 ### Steps of processing
@@ -42,7 +42,7 @@ These pods are controlled the rebuild pods controller.
 ### Docker build for local testing
 - To build for local testing 
 ```
-git clone https://github.com/haitham911/go-k8s-process.git
+git clone https://github.com/k8-proxy/go-k8s-process.git
 cd go-k8s-process
 git submodule update --init
 go build -o  go-k8s-process ./cmd
@@ -95,7 +95,7 @@ rm glasswall.classic.conf
 ### Docker build
 - To build the docker image
 ```
-git clone https://github.com/haitham911/go-k8s-process.git
+git clone https://github.com/k8-proxy/go-k8s-process.git
 cd go-k8s-process
 git submodule update --init
 docker build -t <docker_image_name> .
@@ -117,7 +117,7 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 ```
 
 # Testing steps
-- Run srv1 as per https://github.com/haitham911/go-k8s-srv1
+- Run srv1 as per https://github.com/k8-proxy/go-k8s-srv1
 - Run the container as mentionned above
 
 - Publish data reference to rabbitMq on queue name : adaptation-request-queue with the following data(table) :
@@ -137,5 +137,5 @@ the rebuild CLI have some problems working on alpine , maybe there is missing de
 
 # Rebuild flow to implement
 
-![new-rebuild-flow-v2](https://github.com/haitham911/go-k8s-infra/raw/main/diagram/go-k8s-infra.png)
+![new-rebuild-flow-v2](https://github.com/k8-proxy/go-k8s-infra/raw/main/diagram/go-k8s-infra.png)
 
