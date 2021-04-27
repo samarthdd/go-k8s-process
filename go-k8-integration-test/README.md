@@ -1,4 +1,4 @@
-# go-integration-test-example
+# go-integration-test-k8-process
 
 #### Prerequisites
 
