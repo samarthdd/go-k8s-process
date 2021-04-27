@@ -28,6 +28,6 @@ jobs:
       - name: Upload coverage report
         uses: codecov/codecov-action@v1.2.2
         with:
-          file: ./coverage.txt
+          file: ./cmd/coverage.txt
           flags: unittests
           name: codecov-umbrella
