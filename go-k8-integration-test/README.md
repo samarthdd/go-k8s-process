@@ -12,7 +12,7 @@ Run integration test by running following command:
 ```sh
 make
 ```
-![Test-flow]!(images/testflow.jpg)
+![Test-flow]!(image/testflow.jpg)
 
 
 
