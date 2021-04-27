@@ -30,11 +30,42 @@ type Delivery struct {
 }
 
 func TestProcessMessage(t *testing.T) {
+
 	fakeServer := server.NewServer("amqp://localhost:5672/%2f")
 	fakeServer.Start()
 
 	// Connects opens an AMQP connection from the credentials in the URL.
-	publish(uri, queueName, exchange, exchangeType, body, reliable)
+	//	publish(uri, queueName, exchange, exchangeType, body, reliable)
+	log.Println("[-] Connecting to", uri)
+	connection, err := amqptest.Dial("amqp://localhost:5672/%2f") // now it works =D
+
+	if err != nil {
+		log.Fatalf("[x] AMQP connection error: %s", err)
+	}
+
+	log.Println("[√] Connected successfully")
+
+	channel, err := connection.Channel()
+
+	if err != nil {
+		log.Fatalf("[x] Failed to open a channel: %s", err)
+	}
+
+	defer channel.Close()
+	headers := make(amqp.Table)
+	headers["file-id"] = "544"
+	headers["source-presigned-url"] = "https://s23.q4cdn.com/202968100/files/doc_downloads/test.pdf"
+	headers["rebuilt-file-location"] = "./rbulid"
+	var d amqp.Delivery
+	d.ConsumerTag = "test-tag"
+	d.Headers = headers
+	d.ContentType = "text/plain"
+	d.Body = []byte(body)
+	t.Run("ProcessMessage", func(t *testing.T) {
+		ProcessMessage(d)
+
+	})
+
 	type testSample struct {
 		data          []byte
 		headers       wabbit.Option
@@ -187,16 +218,6 @@ func publish(uri string, queueName string, exchange string, exchangeType string,
 		data.Body(),
 	)
 
-	headers := make(amqp.Table)
-	headers["file-id"] = "544"
-	headers["source-presigned-url"] = "http://localhost"
-	headers["rebuilt-file-location"] = "http://localhost"
-	var d amqp.Delivery
-	d.ConsumerTag = "test-tag"
-	d.Headers = headers
-	d.ContentType = "text/plain"
-	d.Body = []byte(body)
-	ProcessMessage(d)
 }
 
 func declareQueue(queueName string, channel wabbit.Channel) (wabbit.Queue, error) {

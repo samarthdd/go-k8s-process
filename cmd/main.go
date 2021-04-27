@@ -181,13 +181,15 @@ func ProcessMessage(d amqp.Delivery) error {
 	d.Headers["clean-presigned-url"] = urlp
 
 	// Publish the details to Rabbit
-
-	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d.Headers, []byte(""))
-	if err != nil {
-		return fmt.Errorf("error failed to publish message to the ProcessingOutcome queue :%s", err)
+	if publisher != nil {
+		err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d.Headers, []byte(""))
+		if err != nil {
+			return fmt.Errorf("error failed to publish message to the ProcessingOutcome queue :%s", err)
+		}
+		zlog.Info().Str("Exchange", ProcessingOutcomeExchange).Str("RoutingKey", ProcessingOutcomeRoutingKey).Msg("message published to queue ")
+	} else {
+		return fmt.Errorf("publisher not found")
 	}
-	zlog.Info().Str("Exchange", ProcessingOutcomeExchange).Str("RoutingKey", ProcessingOutcomeRoutingKey).Msg("message published to queue ")
-
 	return nil
 }
 
@@ -245,7 +247,9 @@ func getFile(url string) ([]byte, error) {
 }
 
 func uploadMinio(file []byte, filename string) (string, error) {
-
+	if minioClient == nil {
+		return "", fmt.Errorf("minio client not found")
+	}
 	exist, err := minio.CheckIfBucketExists(minioClient, cleanMinioBucket)
 	if err != nil || !exist {
 		return "", err
