@@ -2,7 +2,7 @@ FROM golang:alpine AS builder
 WORKDIR /go/src/github.com/k8-proxy/go-k8s-process
 COPY . .
 RUN  env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o  go-k8s-process ./cmd
-
+RUN git submodule init && git submodule update
 FROM ubuntu:18.04
 
 
