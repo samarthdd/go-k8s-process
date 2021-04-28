@@ -168,17 +168,19 @@ func ProcessMessage(d amqp.Delivery) error {
 		return fmt.Errorf("error failed to upload file to Minio :%s", err)
 
 	}
+	d.Headers["clean-presigned-url"] = urlp
+
 	zlog.Info().Msg("file uploaded to minio successfully")
 
 	if generateReport == "true" {
-		_, err = uploadMinio(gwreport, reportid)
+		urlr, err := uploadMinio(gwreport, reportid)
 		if err != nil {
 			return fmt.Errorf("failed to upload report file to Minio :%s", err)
 		}
+		d.Headers["report-presigned-url"] = urlr
+
 		zlog.Info().Msg("report file uploaded to minio successfully")
 	}
-
-	d.Headers["clean-presigned-url"] = urlp
 
 	// Publish the details to Rabbit
 	if publisher != nil {
