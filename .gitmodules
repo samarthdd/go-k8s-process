@@ -1,0 +1,3 @@
+[submodule "sdk-rebuild-eval"]
+	path = sdk-rebuild-eval
+	url = https://github.com/filetrust/sdk-rebuild-eval.git

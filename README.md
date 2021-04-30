@@ -36,12 +36,68 @@ These pods are controlled the rebuild pods controller.
 - Notifies the queue
 - Exit
 
+### Sdk-rebuild-eval version
+### 1.197
+
+### Docker build for local testing
+- To build for local testing 
+```
+git clone https://github.com/k8-proxy/go-k8s-process.git
+cd go-k8s-process
+git submodule update --init
+go build -o  go-k8s-process ./cmd
+export ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \ 
+ADAPTATION_REQUEST_QUEUE_PORT='<rabbit-port>' \
+MESSAGE_BROKER_USER='<rabbit-user>' \
+MESSAGE_BROKER_PASSWORD='<rabbit-password>' \
+MINIO_ENDPOINT='<minio-endpoint>' \ 
+MINIO_ACCESS_KEY='<minio-access>' \ 
+MINIO_SECRET_KEY='<minio-secret>' \ 
+MINIO_SOURCE_BUCKET='<bucket-to-upload-file>' \ 
+GWCLI='<cli-path>'  \
+INICONFIG='<ini-config-path>' \
+XMLCONFIG='<xml-config-path>'
+
+
+```
+### Installing the Glasswall Rebuild SDK
+
+Copy the `libglasswall.classic.so` shared library into the `/usr/lib` folder.
+```
+cp ./sdk-rebuild-eval/libs/rebuild/linux/libglasswall.classic.so /usr/lib
+```
+
+
+### Inform System about the Glasswall Rebuild SDK 
+Once in place the library needs to be registered to make it accessible. Create a `glasswall.classic.conf` file, with the installed location
+```
+echo "/usr/lib" > glasswall.classic.conf
+```
+Update the `etc` directory
+```
+sudo cp glasswall.classic.conf /etc/ld.so.conf.d
+```
+Run `ldconfig` to configure the dynamic linker run-time bindings
+```
+sudo ldconfig
+```
+
+Check that the Glasswall library has been installed
+```
+sudo ldconfig -p | grep glasswall.classic
+```
+Remove the `.conf` file
+```
+rm glasswall.classic.conf
+```
+
 
 ### Docker build
 - To build the docker image
 ```
 git clone https://github.com/k8-proxy/go-k8s-process.git
 cd go-k8s-process
+git submodule update --init
 docker build -t <docker_image_name> .
 ```
 

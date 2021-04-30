@@ -16,41 +16,38 @@ const (
 	APP           = "glasswallCLI"
 	CONFIGINI     = "config.ini"
 	XMLCONFIG     = "config.xml"
-	PATH          = "./dep"
 	INPUT         = "/tmp/glrebuild"
 	MANAGED       = "Managed"
 	NONCONFORMING = "NonConforming"
+	INPUTKEY      = "inputLocation"
+	OUTPUTKEY     = "outputLocation"
+	SECTION       = "GWConfig"
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-	os.Mkdir(INPUT, 0777)
-}
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-func randStringRunes(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(b)
+func init() {
+	rand.Seed(time.Now().UnixNano())
+	os.MkdirAll(INPUT, 0777)
+	printVersion()
 }
 
 type GwRebuild struct {
 	File     []byte
 	FileName string
+	RandDir  string
 	path     string
 }
 
-func New(f []byte, n string) GwRebuild {
-	return GwRebuild{f, n, ""}
+func New(file []byte, fileName, randDir string) GwRebuild {
+	rebuilPath := filepath.Join(INPUT, randDir)
+	os.MkdirAll(rebuilPath, 0777)
+
+	return GwRebuild{file, fileName, randDir, rebuilPath}
 }
 
 func (r *GwRebuild) Rebuild() error {
 	var err error
-	//r.path, err = os.MkdirTemp(INPUT, "gl")
-	r.path = INPUT
 
 	path := fmt.Sprintf("%s/%s", r.path, r.FileName)
 	if err != nil {
@@ -68,19 +65,9 @@ func (r *GwRebuild) Rebuild() error {
 	return nil
 }
 
-func (r *GwRebuild) clean() {
-	logm := fmt.Sprintf("%s/%s/%s.log", r.path, MANAGED, r.FileName)
-
-	logn := fmt.Sprintf("%s/%s/%s.log", r.path, NONCONFORMING, r.FileName)
-
-	fpath := fmt.Sprintf("%s/%s", r.path, r.FileName)
-
-	os.Remove(logm)
-
-	os.Remove(logn)
-
-	os.Remove(fpath)
-
+func (r *GwRebuild) Clean() error {
+	err := os.RemoveAll(r.path)
+	return err
 }
 
 func (r *GwRebuild) FileProcessed() ([]byte, error) {
@@ -93,12 +80,8 @@ func (r *GwRebuild) FileProcessed() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		os.Remove(pathNonconforming)
 
-	} else {
-		os.Remove(pathManaged)
 	}
-	r.clean()
 	return b, nil
 
 }
@@ -114,48 +97,41 @@ func (r *GwRebuild) FileRreport() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		os.Remove(pathNonconforming)
-
-	} else {
-		os.Remove(pathManaged)
 
 	}
-	r.clean()
 	return b, nil
 
 }
 
 func (r *GwRebuild) exe() error {
-	envr := os.Getenv("IN_CONTAINER")
-	log.Println("in container", envr)
 
-	path, err := filepath.Abs(PATH)
+	app := os.Getenv("GWCLI")
+	configini := os.Getenv("INICONFIG")
+	xmlconfig := os.Getenv("XMLCONFIG")
 
+	randConfigini := fmt.Sprintf("%s/%s/%s", INPUT, r.RandDir, CONFIGINI)
+	randXmlconfig := fmt.Sprintf("%s/%s/%s", INPUT, r.RandDir, XMLCONFIG)
+
+	cmd := exec.Command("cp", configini, randConfigini)
+	err := cmd.Run()
 	if err != nil {
 		return err
 	}
 
-	if envr == "true" {
-		path = PATH[1:]
+	cmd = exec.Command("cp", xmlconfig, randXmlconfig)
+	err = cmd.Run()
+	if err != nil {
+		return err
 	}
-	log.Println("path", path)
 
-	app := fmt.Sprintf("%s/%s", path, APP)
-	configini := fmt.Sprintf("%s/%s", path, CONFIGINI)
-	xmlconfig := fmt.Sprintf("%s/%s", path, XMLCONFIG)
+	iniconf(randConfigini, r.RandDir)
 
-	log.Println("path", app)
-	log.Println("path", configini)
-	log.Println("path", xmlconfig)
+	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, randConfigini, randXmlconfig)
 
-	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, configini, xmlconfig)
-
-	cmd := exec.Command("sh", "-c", args)
+	cmd = exec.Command("sh", "-c", args)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
-	log.Println(path)
-	//cmd.Dir = path
 	err = cmd.Run()
 	log.Println(string(out.Bytes()))
 	if err != nil {
@@ -163,4 +139,25 @@ func (r *GwRebuild) exe() error {
 	}
 
 	return nil
+}
+
+func printVersion() {
+	app := os.Getenv("GWCLI")
+	args := fmt.Sprintf("%s -v", app)
+	cmd := exec.Command("sh", "-c", args)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	cmd.Run()
+
+	log.Printf("\033[32m GW rebuild SDK version : %s\n", string(out.Bytes()))
+
+}
+
+func RandStringRunes(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }
