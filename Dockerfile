@@ -5,7 +5,6 @@ RUN  env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o  go-k8s-process ./cmd
 
 RUN apk update
 RUN apk add git
-RUN git submodule init && git submodule update
 
 FROM ubuntu:18.04
 
