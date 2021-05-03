@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/k8-proxy/k8-go-comm/pkg/minio"
@@ -117,27 +116,6 @@ func ProcessMessage(d amqp.Delivery) error {
 
 	fileID := d.Headers["file-id"].(string)
 	sourcePresignedURL := d.Headers["source-presigned-url"].(string)
-	rebuiltLocation := d.Headers["rebuilt-file-location"].(string)
-
-	// Download the file to output file location
-	downloadPath := "/tmp/" + filepath.Base(rebuiltLocation)
-
-	output := "/tmp/" + fileID
-
-	os.Setenv("FileId", fileID)
-	os.Setenv("InputPath", downloadPath)
-	os.Setenv("OutputPath", output)
-	os.Setenv("GenerateReport", generateReport)
-	os.Setenv("ReplyTo", d.ReplyTo)
-	os.Setenv("ProcessingTimeoutDuration", requestProcessingTimeout)
-	os.Setenv("AdaptationRequestQueueHostname", adaptationRequestQueueHostname)
-	os.Setenv("AdaptationRequestQueuePort", adaptationRequestQueuePort)
-	os.Setenv("ArchiveAdaptationRequestQueueHostname", archiveAdaptationRequestQueueHostname)
-	os.Setenv("ArchiveAdaptationRequestQueuePort", archiveAdaptationRequestQueuePort)
-	os.Setenv("TransactionEventQueueHostname", transactionEventQueueHostname)
-	os.Setenv("TransactionEventQueuePort", transactionEventQueuePort)
-	os.Setenv("MessageBrokerUser", messagebrokeruser)
-	os.Setenv("MessageBrokerPassword", messagebrokerpassword)
 
 	f, err := getFile(sourcePresignedURL)
 	if err != nil {
@@ -183,15 +161,12 @@ func ProcessMessage(d amqp.Delivery) error {
 	}
 
 	// Publish the details to Rabbit
-	if publisher != nil {
-		err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d.Headers, []byte(""))
-		if err != nil {
-			return fmt.Errorf("error failed to publish message to the ProcessingOutcome queue :%s", err)
-		}
-		zlog.Info().Str("Exchange", ProcessingOutcomeExchange).Str("RoutingKey", ProcessingOutcomeRoutingKey).Msg("message published to queue ")
-	} else {
-		return fmt.Errorf("publisher not found")
+	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d.Headers, []byte(""))
+	if err != nil {
+		return fmt.Errorf("error failed to publish message to the ProcessingOutcome queue :%s", err)
 	}
+	zlog.Info().Str("Exchange", ProcessingOutcomeExchange).Str("RoutingKey", ProcessingOutcomeRoutingKey).Msg("message published to queue ")
+
 	return nil
 }
 
