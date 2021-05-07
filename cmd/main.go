@@ -132,7 +132,7 @@ func ProcessMessage(d amqp.Delivery) error {
 	if err != nil {
 
 		zlog.Error().Err(err).Msg("error failed to rebuild file")
-		fn = []byte("error : the  rebuild engine failed to rebuild file")
+		fn = []byte(fmt.Sprintf("error : %s", err))
 
 	} else {
 		zlog.Info().Msg("file rebuilt successfully ")

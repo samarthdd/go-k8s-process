@@ -95,7 +95,10 @@ func (r *GwRebuild) FileRreport() ([]byte, error) {
 	if err != nil {
 		b, err = ioutil.ReadFile(pathNonconforming)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("rebuild failed to process file")
+		} else {
+			return nil, fmt.Errorf("non comformed file ")
+
 		}
 
 	}
