@@ -121,6 +121,10 @@ func ProcessMessage(d amqp.Table) error {
 	clirebuildProcess(f, fileID, d)
 
 	// Publish the details to Rabbit
+	if publisher == nil {
+		return fmt.Errorf("couldn't start publisher")
+	}
+
 	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d, []byte(""))
 	if err != nil {
 		return fmt.Errorf("error failed to publish message to the ProcessingOutcome queue :%s", err)
@@ -136,6 +140,8 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	fd := rebuildexec.New(f, fileid, randPath)
 	err := fd.Rebuild()
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
+
+	d["rebuild-processing-status"] = fd.PrintStatus()
 
 	if err != nil {
 		zlog.Error().Err(err).Msg("error failed to rebuild file")
