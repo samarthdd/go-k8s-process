@@ -1,7 +1,6 @@
 package rebuildexec
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -23,14 +23,22 @@ const (
 	INPUTKEY      = "inputLocation"
 	OUTPUTKEY     = "outputLocation"
 	SECTION       = "GWConfig"
+	REBUILDINPUT  = "input"
+	REBUILDOUTPUT = "output"
 )
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
+var rebuildSdkVersion string
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	os.MkdirAll(INPUT, 0777)
-	printVersion()
+	rebuildSdkVersion = sdkVersion()
+}
+
+func GetSdkVersion() string {
+	return rebuildSdkVersion
 }
 
 type GwRebuild struct {
@@ -45,6 +53,11 @@ type GwRebuild struct {
 func New(file []byte, fileName, randDir string) GwRebuild {
 	rebuilPath := filepath.Join(INPUT, randDir)
 	os.MkdirAll(rebuilPath, 0777)
+	inputRebuildpath := filepath.Join(rebuilPath, REBUILDINPUT)
+	os.MkdirAll(inputRebuildpath, 0777)
+	outputRebuildpath := filepath.Join(rebuilPath, REBUILDOUTPUT)
+
+	os.MkdirAll(outputRebuildpath, 0777)
 
 	gwRebuild := GwRebuild{
 		File:          file,
@@ -61,7 +74,7 @@ func (r *GwRebuild) Rebuild() error {
 
 	var err error
 
-	path := fmt.Sprintf("%s/%s", r.path, r.FileName)
+	path := fmt.Sprintf("%s/%s/%s", r.path, REBUILDINPUT, r.FileName)
 
 	err = ioutil.WriteFile(path, r.File, 0666)
 	if err != nil {
@@ -146,7 +159,7 @@ func (r *GwRebuild) exe() error {
 	return nil
 }
 
-func printVersion() {
+func sdkVersion() string {
 	app := os.Getenv("GWCLI")
 	args := fmt.Sprintf("%s -v", app)
 	cmd := exec.Command("sh", "-c", args)
@@ -155,7 +168,10 @@ func printVersion() {
 
 	cmd.Run()
 
-	log.Printf("\033[32m GW rebuild SDK version : %s\n", string(out.Bytes()))
+	s := string(out.Bytes())
+
+	log.Printf("\033[32m GW rebuild SDK version : %s\n", s)
+	return s
 
 }
 
@@ -206,10 +222,9 @@ func (r *GwRebuild) GwparseLog() error {
 }
 
 func parseStatus(b []byte) string {
-	buf := bytes.NewBuffer(b)
-	scanner := bufio.NewScanner(buf)
-	for scanner.Scan() {
-		statusdesc := parseCode(scanner.Text())
+	sl := strings.Split(string(b), "\n")
+	for _, s := range sl {
+		statusdesc := parseCode(s)
 		if statusdesc != "" {
 			return statusdesc
 		}
@@ -258,7 +273,7 @@ func (r GwRebuild) PrintStatus() string {
 
 func (r *GwRebuild) GwFileLog() ([]byte, error) {
 
-	fileLog := fmt.Sprintf("%s/%s", r.path, "glasswallCLIProcess.log")
+	fileLog := fmt.Sprintf("%s/%s/%s", r.path, REBUILDOUTPUT, "glasswallCLIProcess.log")
 
 	b, err := ioutil.ReadFile(fileLog)
 	if err != nil {
@@ -280,8 +295,8 @@ func (r *GwRebuild) FileLog() ([]byte, error) {
 
 func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
 
-	pathManaged := fmt.Sprintf("%s/%s/%s%s", r.path, MANAGED, r.FileName, fileNameExt)
-	pathNonconforming := fmt.Sprintf("%s/%s/%s%s", r.path, NONCONFORMING, r.FileName, fileNameExt)
+	pathManaged := fmt.Sprintf("%s/%s/%s/%s%s", r.path, REBUILDOUTPUT, MANAGED, r.FileName, fileNameExt)
+	pathNonconforming := fmt.Sprintf("%s/%s/%s/%s%s", r.path, REBUILDOUTPUT, NONCONFORMING, r.FileName, fileNameExt)
 
 	b, err := ioutil.ReadFile(pathManaged)
 	if err != nil {
@@ -293,4 +308,12 @@ func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
 	}
 	return b, nil
 
+}
+
+func parseVersion(b []byte) string {
+	sl := strings.Split(string(b), "\n")
+	if len(sl) > 0 {
+		return sl[0]
+	}
+	return ""
 }

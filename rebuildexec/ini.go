@@ -14,11 +14,11 @@ func iniconf(p, randpath string) error {
 	}
 
 	sec := cfg.Section(SECTION)
-	err = inikey(sec, INPUTKEY, randpath)
+	err = inikey(sec, INPUTKEY, randpath, REBUILDINPUT)
 	if err != nil {
 		return err
 	}
-	err = inikey(sec, OUTPUTKEY, randpath)
+	err = inikey(sec, OUTPUTKEY, randpath, REBUILDOUTPUT)
 	if err != nil {
 		return err
 	}
@@ -30,14 +30,14 @@ func iniconf(p, randpath string) error {
 	return nil
 
 }
-func inikey(s *ini.Section, keyname, randpath string) error {
+func inikey(s *ini.Section, keyname, randpath, ext string) error {
 	ok := s.HasKey(keyname)
 	if !ok {
 		return fmt.Errorf("Fail to find %s key", keyname)
 	}
 	key := s.Key(keyname)
 	v := key.String()
-	v = filepath.Join(v, randpath)
+	v = filepath.Join(INPUT, randpath, ext)
 	key.SetValue(v)
 	return nil
 
