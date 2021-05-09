@@ -85,7 +85,7 @@ func main() {
 		for d := range msgs {
 			zlog.Info().Msg("received message from queue ")
 
-			err := ProcessMessage(d)
+			err := ProcessMessage(d.Headers)
 			if err != nil {
 				zlog.Error().Err(err).Msg("error Failed to process message")
 			}
@@ -101,21 +101,15 @@ func main() {
 
 }
 
-func ProcessMessage(d amqp.Delivery) error {
+func ProcessMessage(d amqp.Table) error {
 
-	if d.Headers["file-id"] == nil ||
-		d.Headers["source-presigned-url"] == nil {
+	if d["file-id"] == nil ||
+		d["source-presigned-url"] == nil {
 		return fmt.Errorf("Headers value is nil")
 	}
 
-	generateReport := "false"
-
-	if d.Headers["generate-report"] != nil {
-		generateReport = d.Headers["generate-report"].(string)
-	}
-
-	fileID := d.Headers["file-id"].(string)
-	sourcePresignedURL := d.Headers["source-presigned-url"].(string)
+	fileID := d["file-id"].(string)
+	sourcePresignedURL := d["source-presigned-url"].(string)
 
 	f, err := getFile(sourcePresignedURL)
 	if err != nil {
@@ -124,44 +118,10 @@ func ProcessMessage(d amqp.Delivery) error {
 
 	zlog.Info().Msg("file downloaded from minio successfully")
 
-	var fn []byte
-	var gwreport []byte
-	err = nil
-
-	fn, gwreport, err = clirebuildProcess(f, fileID)
-	if err != nil {
-
-		zlog.Error().Err(err).Msg("error failed to rebuild file")
-		fn = []byte(fmt.Sprintf("error : %s", err))
-
-	} else {
-		zlog.Info().Msg("file rebuilt successfully ")
-
-	}
-
-	fileid := fmt.Sprintf("rebuild-%s", fileID)
-	reportid := fmt.Sprintf("report-%s.xml", fileID)
-	urlp, err := uploadMinio(fn, fileid)
-	if err != nil {
-		return fmt.Errorf("error failed to upload file to Minio :%s", err)
-
-	}
-	d.Headers["clean-presigned-url"] = urlp
-
-	zlog.Info().Msg("file uploaded to minio successfully")
-
-	if generateReport == "true" {
-		urlr, err := uploadMinio(gwreport, reportid)
-		if err != nil {
-			return fmt.Errorf("failed to upload report file to Minio :%s", err)
-		}
-		d.Headers["report-presigned-url"] = urlr
-
-		zlog.Info().Msg("report file uploaded to minio successfully")
-	}
+	clirebuildProcess(f, fileID, d)
 
 	// Publish the details to Rabbit
-	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d.Headers, []byte(""))
+	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d, []byte(""))
 	if err != nil {
 		return fmt.Errorf("error failed to publish message to the ProcessingOutcome queue :%s", err)
 	}
@@ -170,39 +130,74 @@ func ProcessMessage(d amqp.Delivery) error {
 	return nil
 }
 
-func clirebuildProcess(f []byte, fileid string) ([]byte, []byte, error) {
+func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
+
 	randPath := rebuildexec.RandStringRunes(16)
 	fd := rebuildexec.New(f, fileid, randPath)
 	err := fd.Rebuild()
+	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
+
 	if err != nil {
-		err = fmt.Errorf("error rebuild function : %s", err)
-		return nil, nil, err
+		zlog.Error().Err(err).Msg("error failed to rebuild file")
+
+		return
 	}
 
-	report, err := fd.FileRreport()
-	if err != nil {
-		err = fmt.Errorf("error rebuildexec fileRreport function : %s", err)
+	zlog.Info().Msg("file rebuilt process  successfully ")
 
-		return nil, nil, err
+	generateReport := ""
+	if d["generate-report"] != nil {
+		generateReport = d["generate-report"].(string)
+	}
+
+	if generateReport == "true" {
+		report, err := fd.FileRreport()
+		if err != nil {
+			zlog.Error().Err(err).Msg("error rebuildexec fileRreport function")
+
+		} else {
+
+			minioUploadProcess(report, fileid, "report.xml", "report-presigned-url", d)
+		}
 
 	}
 
 	file, err := fd.FileProcessed()
 
 	if err != nil {
-		err = fmt.Errorf("error rebuildexec FileProcessed function : %s", err)
+		zlog.Error().Err(err).Msg("error rebuildexec FileProcessed function")
 
-		return nil, nil, err
+	} else {
+		minioUploadProcess(file, "rebuild-", fileid, "clean-presigned-url", d)
 
 	}
+
+	gwlogFile, err := fd.GwFileLog()
+	if err != nil {
+
+		zlog.Error().Err(err).Msg("error rebuildexec GwFileLog function")
+
+	} else {
+		minioUploadProcess(gwlogFile, fileid, "gwfilelog.log", "gwlog-presigned-url", d)
+
+	}
+
+	logFile, err := fd.FileLog()
+
+	if err != nil {
+
+		zlog.Error().Err(err).Msg("error rebuildexec GwFileLog function")
+
+	} else {
+		minioUploadProcess(logFile, fileid, "filelog.log", "log-presigned-url", d)
+
+	}
+
 	err = fd.Clean()
 	if err != nil {
-		err = fmt.Errorf("error rebuildexec Clean function : %s", err)
-
-		return nil, nil, err
+		zlog.Error().Err(err).Msg("error rebuildexec Clean function : %s")
 
 	}
-	return file, report, nil
 }
 
 func getFile(url string) ([]byte, error) {
@@ -246,4 +241,20 @@ func uploadMinio(file []byte, filename string) (string, error) {
 
 	return urlx.String(), nil
 
+}
+
+func minioUploadProcess(file []byte, baseName, extName, headername string, d amqp.Table) {
+
+	reportid := fmt.Sprintf("%s%s", baseName, extName)
+
+	urlr, err := uploadMinio(file, reportid)
+	if err != nil {
+		m := fmt.Sprintf("failed to upload %s file to Minio", extName)
+		zlog.Info().Msg(m)
+		return
+	}
+	m := fmt.Sprintf("%s file uploaded to minio successfully", extName)
+
+	zlog.Info().Msg(m)
+	d[headername] = urlr
 }

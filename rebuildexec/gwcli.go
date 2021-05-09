@@ -1,6 +1,7 @@
 package rebuildexec
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -37,28 +38,47 @@ type GwRebuild struct {
 	FileName string
 	RandDir  string
 	path     string
+
+	statusMessage string
 }
 
 func New(file []byte, fileName, randDir string) GwRebuild {
 	rebuilPath := filepath.Join(INPUT, randDir)
 	os.MkdirAll(rebuilPath, 0777)
 
-	return GwRebuild{file, fileName, randDir, rebuilPath}
+	gwRebuild := GwRebuild{
+		File:          file,
+		FileName:      fileName,
+		RandDir:       randDir,
+		path:          rebuilPath,
+		statusMessage: "",
+	}
+
+	return gwRebuild
 }
 
 func (r *GwRebuild) Rebuild() error {
+
 	var err error
 
 	path := fmt.Sprintf("%s/%s", r.path, r.FileName)
-	if err != nil {
-		return err
-	}
+
 	err = ioutil.WriteFile(path, r.File, 0666)
 	if err != nil {
+		r.statusMessage = "INTERNAL ERROR"
 		return err
 	}
 	err = r.exe()
 	if err != nil {
+		r.statusMessage = "INTERNAL ERROR"
+
+		return err
+	}
+
+	err = r.RebuildStatus()
+	if err != nil {
+		r.statusMessage = "INTERNAL ERROR"
+
 		return err
 	}
 
@@ -71,39 +91,21 @@ func (r *GwRebuild) Clean() error {
 }
 
 func (r *GwRebuild) FileProcessed() ([]byte, error) {
-	pathManaged := fmt.Sprintf("%s/%s/%s", r.path, MANAGED, r.FileName)
-	pathNonconforming := fmt.Sprintf("%s/%s/%s", r.path, NONCONFORMING, r.FileName)
-
-	b, err := ioutil.ReadFile(pathManaged)
+	b, err := r.retrieveGwFile("")
 	if err != nil {
-		b, err = ioutil.ReadFile(pathNonconforming)
-		if err != nil {
-			return nil, err
-		}
-
+		return nil, fmt.Errorf("processed file not found")
 	}
 	return b, nil
 
 }
 
 func (r *GwRebuild) FileRreport() ([]byte, error) {
-	pathManaged := fmt.Sprintf("%s/%s/%s.xml", r.path, MANAGED, r.FileName)
 
-	pathNonconforming := fmt.Sprintf("%s/%s/%s.xml", r.path, NONCONFORMING, r.FileName)
-
-	b, err := ioutil.ReadFile(pathManaged)
+	b, err := r.retrieveGwFile(".xml")
 	if err != nil {
-		b, err = ioutil.ReadFile(pathNonconforming)
-		if err != nil {
-			return nil, fmt.Errorf("rebuild failed to process file")
-		} else {
-			return nil, fmt.Errorf("non comformed file ")
-
-		}
-
+		return nil, fmt.Errorf("report file not found")
 	}
 	return b, nil
-
 }
 
 func (r *GwRebuild) exe() error {
@@ -163,4 +165,132 @@ func RandStringRunes(n int) string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
+}
+
+const (
+	clean             = "the file is clean"
+	cleaned           = " the file is clean by rebuild engine"
+	unprocessableFile = "the file is can't be prcesssed by the rebuild engine"
+	internalError     = "server internal error"
+)
+
+func (r *GwRebuild) RebuildStatus() error {
+
+	//enum rebuild_request_body_return {REBUILD_UNPROCESSED=0, REBUILD_REBUILT=1, REBUILD_FAILED=2, REBUILD_ERROR=9};
+	/* REBUILD_UNPROCESSED - to continue to unchanged content */
+	/* REBUILD_REBUILT - to continue to rebuilt content */
+	/* REBUILD_FAILED - to report error and use supplied error report */
+	/* REBUILD_ERROR - to report  processing error */
+
+	return r.GwparseLog()
+
+}
+
+type gwLogInfo struct {
+	statusCode    string
+	statusMessage string
+}
+
+func (r *GwRebuild) GwparseLog() error {
+	b, err := r.FileLog()
+	if err != nil {
+		return err
+	}
+	if len(b) < 200 {
+		r.statusMessage = parseStatus(b)
+	} else {
+		r.statusMessage = parseStatus(b[(len(b) - 200):])
+
+	}
+	return nil
+}
+
+func parseStatus(b []byte) string {
+	buf := bytes.NewBuffer(b)
+	scanner := bufio.NewScanner(buf)
+	for scanner.Scan() {
+		statusdesc := parseCode(scanner.Text())
+		if statusdesc != "" {
+			return statusdesc
+		}
+	}
+
+	return "UNPROCESSABLE"
+
+}
+
+func parseCode(s string) string {
+
+	str := "Glasswall process exit status = "
+	if len(s) < len(str) {
+		return ""
+	}
+	d := s[:len(str)]
+	log.Println(d)
+	if s[:len(str)] != str {
+		return ""
+	}
+
+	s = s[len(str):]
+
+	var statusDesc string
+
+	for _, c := range s {
+
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+			statusDesc = fmt.Sprintf("%s%s", statusDesc, string(c))
+		}
+	}
+	return statusDesc
+}
+
+func checkfileExist() {
+	if _, err := os.Stat("/path/to/whatever"); os.IsNotExist(err) {
+		// path/to/whatever does not exist
+	}
+}
+
+func (r GwRebuild) PrintStatus() string {
+
+	s := r.statusMessage
+	return s
+}
+
+func (r *GwRebuild) GwFileLog() ([]byte, error) {
+
+	fileLog := fmt.Sprintf("%s/%s", r.path, "glasswallCLIProcess.log")
+
+	b, err := ioutil.ReadFile(fileLog)
+	if err != nil {
+		return nil, fmt.Errorf("glasswallCLIProcess.log fileLog file not found")
+	}
+	return b, nil
+
+}
+
+func (r *GwRebuild) FileLog() ([]byte, error) {
+
+	b, err := r.retrieveGwFile(".log")
+	if err != nil {
+		return nil, fmt.Errorf("log file not found")
+	}
+	return b, nil
+
+}
+
+func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
+
+	pathManaged := fmt.Sprintf("%s/%s/%s%s", r.path, MANAGED, r.FileName, fileNameExt)
+	pathNonconforming := fmt.Sprintf("%s/%s/%s%s", r.path, NONCONFORMING, r.FileName, fileNameExt)
+
+	b, err := ioutil.ReadFile(pathManaged)
+	if err != nil {
+		b, err = ioutil.ReadFile(pathNonconforming)
+		if err != nil {
+			return nil, err
+		}
+
+	}
+	return b, nil
+
 }
