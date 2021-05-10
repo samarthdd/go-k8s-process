@@ -164,7 +164,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 		} else {
 
-			minioUploadProcess(report, fileid, "report.xml", "report-presigned-url", d)
+			minioUploadProcess(report, fileid, ".xml", "report-presigned-url", d)
 		}
 
 	}
@@ -185,7 +185,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 		zlog.Error().Err(err).Msg("error rebuildexec GwFileLog function")
 
 	} else {
-		minioUploadProcess(gwlogFile, fileid, "gwfilelog.log", "gwlog-presigned-url", d)
+		minioUploadProcess(gwlogFile, fileid, ".gw.log", "gwlog-presigned-url", d)
 
 	}
 
@@ -196,7 +196,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 		zlog.Error().Err(err).Msg("error rebuildexec GwFileLog function")
 
 	} else {
-		minioUploadProcess(logFile, fileid, "filelog.log", "log-presigned-url", d)
+		minioUploadProcess(logFile, fileid, ".log", "log-presigned-url", d)
 
 	}
 

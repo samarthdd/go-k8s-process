@@ -34,7 +34,7 @@ var rebuildSdkVersion string
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	os.MkdirAll(INPUT, 0777)
-	rebuildSdkVersion = sdkVersion()
+	rebuildSdkVersion = PrintVersion()
 }
 
 func GetSdkVersion() string {
@@ -44,37 +44,55 @@ func GetSdkVersion() string {
 type GwRebuild struct {
 	File     []byte
 	FileName string
-	RandDir  string
-	path     string
+	workDir  string
 
 	statusMessage string
 }
 
 func New(file []byte, fileName, randDir string) GwRebuild {
-	rebuilPath := filepath.Join(INPUT, randDir)
-	os.MkdirAll(rebuilPath, 0777)
-	inputRebuildpath := filepath.Join(rebuilPath, REBUILDINPUT)
-	os.MkdirAll(inputRebuildpath, 0777)
-	outputRebuildpath := filepath.Join(rebuilPath, REBUILDOUTPUT)
 
-	os.MkdirAll(outputRebuildpath, 0777)
+	fullpath := filepath.Join(INPUT, randDir)
 
 	gwRebuild := GwRebuild{
 		File:          file,
 		FileName:      fileName,
-		RandDir:       randDir,
-		path:          rebuilPath,
+		workDir:       fullpath,
 		statusMessage: "",
 	}
 
 	return gwRebuild
 }
 
+func setupDirs(workDir string) error {
+
+	err := os.MkdirAll(workDir, 0777)
+	if err != nil {
+		return err
+	}
+
+	inputRebuildpath := filepath.Join(workDir, REBUILDINPUT)
+	err = os.MkdirAll(inputRebuildpath, 0777)
+	if err != nil {
+		return err
+	}
+	outputRebuildpath := filepath.Join(workDir, REBUILDOUTPUT)
+
+	err = os.MkdirAll(outputRebuildpath, 0777)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *GwRebuild) Rebuild() error {
 
-	var err error
+	err := setupDirs(r.workDir)
+	if err != nil {
+		r.statusMessage = "INTERNAL ERROR"
+		return err
+	}
 
-	path := fmt.Sprintf("%s/%s/%s", r.path, REBUILDINPUT, r.FileName)
+	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
 
 	err = ioutil.WriteFile(path, r.File, 0666)
 	if err != nil {
@@ -99,7 +117,7 @@ func (r *GwRebuild) Rebuild() error {
 }
 
 func (r *GwRebuild) Clean() error {
-	err := os.RemoveAll(r.path)
+	err := os.RemoveAll(r.workDir)
 	return err
 }
 
@@ -127,8 +145,8 @@ func (r *GwRebuild) exe() error {
 	configini := os.Getenv("INICONFIG")
 	xmlconfig := os.Getenv("XMLCONFIG")
 
-	randConfigini := fmt.Sprintf("%s/%s/%s", INPUT, r.RandDir, CONFIGINI)
-	randXmlconfig := fmt.Sprintf("%s/%s/%s", INPUT, r.RandDir, XMLCONFIG)
+	randConfigini := fmt.Sprintf("%s/%s", r.workDir, CONFIGINI)
+	randXmlconfig := fmt.Sprintf("%s/%s", r.workDir, XMLCONFIG)
 
 	cmd := exec.Command("cp", configini, randConfigini)
 	err := cmd.Run()
@@ -142,21 +160,35 @@ func (r *GwRebuild) exe() error {
 		return err
 	}
 
-	iniconf(randConfigini, r.RandDir)
+	iniconf(randConfigini, r.workDir)
 
 	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, randConfigini, randXmlconfig)
 
-	cmd = exec.Command("sh", "-c", args)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-
-	err = cmd.Run()
-	log.Println(string(out.Bytes()))
+	b, err := gwCliExec(args)
 	if err != nil {
 		return err
 	}
 
+	log.Printf("\033[32m %s", string(b))
+
 	return nil
+}
+
+func PrintVersion() string {
+
+	app := os.Getenv("GWCLI")
+
+	args := fmt.Sprintf("%s -v", app)
+
+	b, err := gwCliExec(args)
+	if err != nil {
+		b = []byte(err.Error())
+	}
+
+	s := parseVersion(string(b))
+
+	log.Printf("\033[32m GW rebuild SDK version : %s\n", s)
+	return s
 }
 
 func sdkVersion() string {
@@ -197,31 +229,29 @@ func (r *GwRebuild) RebuildStatus() error {
 	/* REBUILD_REBUILT - to continue to rebuilt content */
 	/* REBUILD_FAILED - to report error and use supplied error report */
 	/* REBUILD_ERROR - to report  processing error */
-
-	return r.GwparseLog()
-
-}
-
-type gwLogInfo struct {
-	statusCode    string
-	statusMessage string
-}
-
-func (r *GwRebuild) GwparseLog() error {
 	b, err := r.FileLog()
 	if err != nil {
 		return err
 	}
-	if len(b) < 200 {
-		r.statusMessage = parseStatus(b)
-	} else {
-		r.statusMessage = parseStatus(b[(len(b) - 200):])
 
-	}
+	r.statusMessage = parseStatus(string(b))
+
 	return nil
+
 }
 
-func parseStatus(b []byte) string {
+func (r *GwRebuild) GwparseLog(b []byte) {
+
+}
+
+func parseStatus(b string) string {
+
+	if len(b) > 200 {
+
+		b = (b[(len(b) - 200):])
+
+	}
+
 	sl := strings.Split(string(b), "\n")
 	for _, s := range sl {
 		statusdesc := parseCode(s)
@@ -259,12 +289,6 @@ func parseCode(s string) string {
 	return statusDesc
 }
 
-func checkfileExist() {
-	if _, err := os.Stat("/path/to/whatever"); os.IsNotExist(err) {
-		// path/to/whatever does not exist
-	}
-}
-
 func (r GwRebuild) PrintStatus() string {
 
 	s := r.statusMessage
@@ -273,7 +297,7 @@ func (r GwRebuild) PrintStatus() string {
 
 func (r *GwRebuild) GwFileLog() ([]byte, error) {
 
-	fileLog := fmt.Sprintf("%s/%s/%s", r.path, REBUILDOUTPUT, "glasswallCLIProcess.log")
+	fileLog := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDOUTPUT, "glasswallCLIProcess.log")
 
 	b, err := ioutil.ReadFile(fileLog)
 	if err != nil {
@@ -295,8 +319,8 @@ func (r *GwRebuild) FileLog() ([]byte, error) {
 
 func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
 
-	pathManaged := fmt.Sprintf("%s/%s/%s/%s%s", r.path, REBUILDOUTPUT, MANAGED, r.FileName, fileNameExt)
-	pathNonconforming := fmt.Sprintf("%s/%s/%s/%s%s", r.path, REBUILDOUTPUT, NONCONFORMING, r.FileName, fileNameExt)
+	pathManaged := fmt.Sprintf("%s/%s/%s/%s%s", r.workDir, REBUILDOUTPUT, MANAGED, r.FileName, fileNameExt)
+	pathNonconforming := fmt.Sprintf("%s/%s/%s/%s%s", r.workDir, REBUILDOUTPUT, NONCONFORMING, r.FileName, fileNameExt)
 
 	b, err := ioutil.ReadFile(pathManaged)
 	if err != nil {
@@ -310,10 +334,66 @@ func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
 
 }
 
-func parseVersion(b []byte) string {
+func parseVersion(b string) string {
 	sl := strings.Split(string(b), "\n")
+
 	if len(sl) > 0 {
 		return sl[0]
 	}
 	return ""
+}
+
+func gwCliExec(args string) ([]byte, error) {
+	cmd := exec.Command("sh", "-c", args)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	err := cmd.Run()
+
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitStarusDesc := CliExitStatus(exitError.ExitCode())
+			return nil, fmt.Errorf(exitStarusDesc)
+		}
+		return nil, err
+	}
+
+	b := out.Bytes()
+	return b, nil
+}
+
+const (
+	rcSucess = iota
+	rcInvalidCommandLine
+	rcDllLoadFailure
+	rcConfigLoadFailure
+	rcProcessingIssue
+)
+
+const (
+	rcSucessDesc             = "rcSucessDesc : Test completed successfully"
+	rcInvalidCommandLineDesc = "rcInvalidCommandLineDesc : Command line argument is invalid"
+	rcDllLoadFailureDesc     = "rcDllLoadFailureDesc :Problem loading the DLL/Shared library"
+	rcConfigLoadFailureDesc  = "rcConfigLoadFailureDesc : Problem loading the specified configuration file"
+	rcProcessingIssueDesc    = "rcProcessingIssueDesc : Problem processing the specified files"
+	unkownExitStatusCode     = "unknown exit status code"
+)
+
+func CliExitStatus(errCode int) string {
+	switch errCode {
+	case rcSucess:
+		return rcSucessDesc
+	case rcInvalidCommandLine:
+		return rcInvalidCommandLineDesc
+	case rcDllLoadFailure:
+		return rcDllLoadFailureDesc
+	case rcConfigLoadFailure:
+		return rcConfigLoadFailureDesc
+	case rcProcessingIssue:
+		return rcProcessingIssueDesc
+	default:
+		return fmt.Sprintf("%s : %v", unkownExitStatusCode, errCode)
+
+	}
+
 }
