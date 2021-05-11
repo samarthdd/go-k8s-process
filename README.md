@@ -102,7 +102,7 @@ docker build -t <docker_image_name> .
 ```
 
 - To run the container
-First make sure that you have rabbitmq and minio running, then run the command bellow 
+First make sure that you have rabbitmq  minio and jaeger running, then run the command bellow 
 
 ```
 docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \ 
@@ -113,6 +113,8 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 -e MINIO_ACCESS_KEY='<minio-access>' \ 
 -e MINIO_SECRET_KEY='<minio-secret>' \ 
 -e MINIO_SOURCE_BUCKET='<bucket-to-upload-file>' \ 
+-e JAEGER_AGENT_HOST='<jaeger-host>' \
+-e JAEGER_AGENT_PORT='<jaeger-port>' \
 --name <docker_container_name> <docker_image_name>
 ```
 
