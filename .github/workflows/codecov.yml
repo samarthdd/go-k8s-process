@@ -23,7 +23,7 @@ jobs:
           fi
 
       - name: TestCov
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+        run: make ./go-k8-integration-test
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v1.2.2
