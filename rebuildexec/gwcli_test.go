@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	mainProjectDir       = "go-k8s-process"
-	depDir               = "sample"
-	TempdepDir           = "/tmp/sample"
-	CliTemp              = "/tmp/sample/glasswallCLI"
-	GwEnginePathUsrPath  = "/tmp/sample/libglasswall.classic.so"
-	CliExecConfigIniTemp = "/tmp/sample/testConfig.ini"
-	CliExecXmlonfigTemp  = "/tmp/sample/testConfig.xml"
+	mainProjectDir          = "go-k8s-process"
+	depDir                  = "sample"
+	depDirTemp              = "/tmp/sample"
+	CliTemp                 = "/tmp/sample/glasswallCLI"
+	GwEnginePathUsrPathTemp = "/tmp/sample/libglasswall.classic.so"
+	CliExecConfigIniTemp    = "/tmp/sample/testConfig.ini"
+	CliExecXmlonfigTemp     = "/tmp/sample/testConfig.xml"
 
 	sampleFilePath = "sample/sample.pdf"
 	sampleFileName = "sample.pdf"
@@ -30,8 +30,8 @@ const (
 
 	CliExecConfigIni = "sample/testConfig.ini"
 	CliExecXmlonfig  = "sample/testConfig.xml"
-	rbuildInput      = "/tmp/glrebuild/gwCliExecUnitTest/input"
-	rbuildOutput     = "/tmp/glrebuild/gwCliExecUnitTest/output"
+	rbuildInputTemp  = "/tmp/glrebuild/gwCliExecUnitTest/input"
+	rbuildOutputTemp = "/tmp/glrebuild/gwCliExecUnitTest/output"
 
 	SamplePdfPath = "sample/sample.pdf"
 )
@@ -45,9 +45,6 @@ var (
 
 func init() {
 	var exitt bool
-
-	os.MkdirAll("/tmp/glrebuild/gwCliExecUnitTest/input", 0777)
-	os.MkdirAll("/tmp/glrebuild/gwCliExecUnitTest/output", 0777)
 
 	mainProjectPath, _ = os.Getwd()
 
@@ -64,6 +61,9 @@ func init() {
 
 	projectDir := mainProjectPath
 
+	os.MkdirAll(filepath.Join(mainProjectPath, rbuildInputTemp), 0777)
+	os.MkdirAll(filepath.Join(mainProjectPath, rbuildOutputTemp), 0777)
+
 	err := setupDep(projectDir)
 	if err != nil {
 		log.Println(err)
@@ -77,12 +77,12 @@ func setupDep(mainDir string) error {
 
 	var out bytes.Buffer
 
-	os.Setenv("LD_LIBRARY_PATH", TempdepDir)
+	os.Setenv("LD_LIBRARY_PATH", filepath.Join(mainProjectPath, depDirTemp))
 	log.Println(os.Getenv("LD_LIBRARY_PATH"))
 
 	absouluteDepDir := filepath.Join(mainDir, depDir)
 
-	cmd := exec.Command("cp", "-r", absouluteDepDir, TempdepDir)
+	cmd := exec.Command("cp", "-r", absouluteDepDir, filepath.Join(mainProjectPath, depDirTemp))
 	cmd.Stdout = &out
 	err := cmd.Run()
 	log.Println(string(out.Bytes()))
@@ -91,29 +91,29 @@ func setupDep(mainDir string) error {
 
 		return err
 	}
-	os.Setenv("INICONFIG", CliExecConfigIniTemp)
-	os.Setenv("XMLCONFIG", CliExecXmlonfigTemp)
-	os.Setenv("GWCLI", CliTemp)
+	os.Setenv("INICONFIG", filepath.Join(mainProjectPath, CliExecConfigIniTemp))
+	os.Setenv("XMLCONFIG", filepath.Join(mainProjectPath, CliExecXmlonfigTemp))
+	os.Setenv("GWCLI", filepath.Join(mainProjectPath, CliTemp))
 
 	iniConfig = os.Getenv("INICONFIG")
 	xmlConfigEnv = os.Getenv("XMLCONFIG")
 	gwCliEnv = os.Getenv("GWCLI")
 
 	absouluteCLi := filepath.Join(mainDir, GwCliPath)
-	cmd = exec.Command("cp", absouluteCLi, CliTemp)
+	cmd = exec.Command("cp", absouluteCLi, filepath.Join(mainProjectPath, CliTemp))
 	err = cmd.Run()
 	if err != nil {
 		return err
 	}
 
 	absouluteEngine := filepath.Join(mainDir, GwEnginePath)
-	cmd = exec.Command("cp", absouluteEngine, GwEnginePathUsrPath)
+	cmd = exec.Command("cp", absouluteEngine, filepath.Join(mainProjectPath, GwEnginePathUsrPathTemp))
 	err = cmd.Run()
 	if err != nil {
 		return err
 	}
 
-	err = os.Chmod(CliTemp, 0777)
+	err = os.Chmod(filepath.Join(mainProjectPath, CliTemp), 0777)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func moveFile(oldpath, newpath string) error {
 func TestGwCliExec(t *testing.T) {
 
 	pdfFilePath := filepath.Join(mainProjectPath, SamplePdfPath)
-	inputPdffilePath := filepath.Join(rbuildInput, sampleFileName)
+	inputPdffilePath := filepath.Join(mainProjectPath, rbuildInputTemp, sampleFileName)
 	err := moveFile(pdfFilePath, inputPdffilePath)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -203,7 +203,9 @@ func TestGwCliExec(t *testing.T) {
 
 	//test case rcDLLLOADFAILURE
 
-	os.Rename(GwEnginePathUsrPath, GwEnginePathUsrPath[:len(GwEnginePathUsrPath)-1])
+	gwEnginepath := filepath.Join(mainProjectPath, GwEnginePathUsrPathTemp)
+
+	os.Rename(gwEnginepath, gwEnginepath[:len(gwEnginepath)-1])
 	_, err = gwCliExec(validArgs)
 	if err != nil {
 		if err.Error() != rcDllLoadFailureDesc {
@@ -213,7 +215,7 @@ func TestGwCliExec(t *testing.T) {
 		t.Errorf("test fails expected %s got %s", rcDllLoadFailureDesc, rcSucessDesc)
 
 	}
-	os.Rename(GwEnginePathUsrPath[:len(GwEnginePathUsrPath)-1], GwEnginePathUsrPath)
+	os.Rename(gwEnginepath[:len(gwEnginepath)-1], gwEnginepath)
 
 	//test case rcDLLLOADFAILURE
 
@@ -340,7 +342,7 @@ SUCCESS
 
 func TestRebuildFile(t *testing.T) {
 
-	f, _ := ioutil.ReadFile("/home/ibrahim/Desktop/demopdf/sample.pdf")
+	f, _ := ioutil.ReadFile(filepath.Join(mainProjectPath, depDirTemp, "sample.pdf"))
 	randPath := RandStringRunes(16)
 	fd := New(f, "samplee.pdf", "*", randPath)
 	err := fd.Rebuild()
