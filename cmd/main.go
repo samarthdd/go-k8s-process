@@ -137,18 +137,19 @@ func ProcessMessage(d amqp.Table) error {
 func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	randPath := rebuildexec.RandStringRunes(16)
-	fd := rebuildexec.New(f, fileid, randPath)
+	fileTtype := "*" // wild card
+	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
 	err := fd.Rebuild()
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
-
-	d["rebuild-processing-status"] = fd.PrintStatus()
-	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
 
 	if err != nil {
 		zlog.Error().Err(err).Msg("error failed to rebuild file")
 
 		return
 	}
+
+	d["rebuild-processing-status"] = fd.PrintStatus()
+	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
 
 	zlog.Info().Msg("file rebuilt process  successfully ")
 
@@ -158,9 +159,9 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	}
 
 	if generateReport == "true" {
-		report, err := fd.FileRreport()
-		if err != nil {
-			zlog.Error().Err(err).Msg("error rebuildexec fileRreport function")
+		report := fd.ReportFile
+		if report == nil {
+			zlog.Error().Msg("error rebuildexec fileRreport function")
 
 		} else {
 
@@ -169,31 +170,31 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	}
 
-	file, err := fd.FileProcessed()
+	file := fd.RebuiltFile
 
-	if err != nil {
-		zlog.Error().Err(err).Msg("error rebuildexec FileProcessed function")
+	if file == nil {
+		zlog.Error().Msg("error rebuildexec FileProcessed function")
 
 	} else {
 		minioUploadProcess(file, "rebuild-", fileid, "clean-presigned-url", d)
 
 	}
 
-	gwlogFile, err := fd.GwFileLog()
-	if err != nil {
+	gwlogFile := fd.GwLogFile
+	if gwlogFile == nil {
 
-		zlog.Error().Err(err).Msg("error rebuildexec GwFileLog function")
+		zlog.Error().Msg("error rebuildexec GwFileLog function")
 
 	} else {
 		minioUploadProcess(gwlogFile, fileid, ".gw.log", "gwlog-presigned-url", d)
 
 	}
 
-	logFile, err := fd.FileLog()
+	logFile := fd.LogFile
 
-	if err != nil {
+	if logFile == nil {
 
-		zlog.Error().Err(err).Msg("error rebuildexec GwFileLog function")
+		zlog.Error().Msg("error rebuildexec GwFileLog function")
 
 	} else {
 		minioUploadProcess(logFile, fileid, ".log", "log-presigned-url", d)

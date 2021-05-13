@@ -1736,4 +1736,10 @@ Checking output
 
 Glasswall process exit status = 162
 `
+
+	LogFileExpir = `
+Stack Limit=8388608, Operating Stack Limit=7549747
+Licence checking is enabled
+isDllInValidPeriod: CurrentDate[21130] dllDate[21098] DaysValid[30]
+[FAILURE_LOG_GWALLLIB_2479032927] Zero day licence has expired`
 )

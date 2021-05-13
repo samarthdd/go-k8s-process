@@ -11,6 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/go-ini/ini"
+
+	zlog "github.com/rs/zerolog/log"
 )
 
 const (
@@ -25,6 +29,7 @@ const (
 	SECTION       = "GWConfig"
 	REBUILDINPUT  = "input"
 	REBUILDOUTPUT = "output"
+	FILETYPEKEY   = "fileType"
 )
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -44,20 +49,26 @@ func GetSdkVersion() string {
 type GwRebuild struct {
 	File     []byte
 	FileName string
+	FileType string
 	workDir  string
 
 	statusMessage string
+
+	RebuiltFile []byte
+	ReportFile  []byte
+	LogFile     []byte
+	GwLogFile   []byte
 }
 
-func New(file []byte, fileName, randDir string) GwRebuild {
+func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 
 	fullpath := filepath.Join(INPUT, randDir)
 
 	gwRebuild := GwRebuild{
-		File:          file,
-		FileName:      fileName,
-		workDir:       fullpath,
-		statusMessage: "",
+		File:     file,
+		FileName: fileName,
+		FileType: fileType,
+		workDir:  fullpath,
 	}
 
 	return gwRebuild
@@ -100,17 +111,30 @@ func (r *GwRebuild) Rebuild() error {
 		return err
 	}
 	err = r.exe()
+
 	if err != nil {
 		r.statusMessage = "INTERNAL ERROR"
 
 		return err
 	}
+	r.FileProcessed()
 
-	err = r.RebuildStatus()
-	if err != nil {
-		r.statusMessage = "INTERNAL ERROR"
+	if r.LogFile != nil {
+		r.RebuildStatus()
 
-		return err
+	} else {
+		r.FileType = "pdf"
+		r.exe()
+
+		if err != nil {
+			r.statusMessage = "INTERNAL ERROR"
+
+			return err
+		}
+		r.FileProcessed()
+
+		r.RebuildStatus()
+
 	}
 
 	return nil
@@ -121,22 +145,28 @@ func (r *GwRebuild) Clean() error {
 	return err
 }
 
-func (r *GwRebuild) FileProcessed() ([]byte, error) {
-	b, err := r.retrieveGwFile("")
+func (r *GwRebuild) FileProcessed() {
+	var err error
+	r.RebuiltFile, err = r.retrieveGwFile("")
 	if err != nil {
-		return nil, fmt.Errorf("processed file not found")
+		zlog.Error().Err(err).Msg("processed file not found")
 	}
-	return b, nil
 
-}
-
-func (r *GwRebuild) FileRreport() ([]byte, error) {
-
-	b, err := r.retrieveGwFile(".xml")
+	r.ReportFile, err = r.retrieveGwFile(".xml")
 	if err != nil {
-		return nil, fmt.Errorf("report file not found")
+		zlog.Error().Err(err).Msg("report file not found")
 	}
-	return b, nil
+
+	r.LogFile, err = r.retrieveGwFile(".log")
+	if err != nil {
+		zlog.Error().Err(err).Msg("log file not found")
+	}
+
+	r.GwLogFile, err = r.GwFileLog()
+	if err != nil {
+		zlog.Error().Err(err).Msg("gw log file not found")
+	}
+
 }
 
 func (r *GwRebuild) exe() error {
@@ -160,7 +190,35 @@ func (r *GwRebuild) exe() error {
 		return err
 	}
 
-	iniconf(randConfigini, r.workDir)
+	cfg, err := ini.Load(randConfigini)
+	if err != nil {
+		return fmt.Errorf("Fail to read ini file  %s", err)
+	}
+
+	sec := cfg.Section(SECTION)
+
+	inputValue := filepath.Join(r.workDir, REBUILDINPUT)
+	err = inikey(sec, INPUTKEY, inputValue)
+	if err != nil {
+		return err
+	}
+
+	outputValue := filepath.Join(r.workDir, REBUILDOUTPUT)
+	err = inikey(sec, OUTPUTKEY, outputValue)
+	if err != nil {
+		return err
+	}
+
+	err = inikey(sec, FILETYPEKEY, r.FileType)
+	if err != nil {
+		return err
+	}
+
+	err = cfg.SaveTo(randConfigini)
+	if err != nil {
+		return fmt.Errorf("Fail to save ini file : %s", err)
+
+	}
 
 	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, randConfigini, randXmlconfig)
 
@@ -177,7 +235,6 @@ func (r *GwRebuild) exe() error {
 func PrintVersion() string {
 
 	app := os.Getenv("GWCLI")
-
 	args := fmt.Sprintf("%s -v", app)
 
 	b, err := gwCliExec(args)
@@ -222,21 +279,16 @@ const (
 	internalError     = "server internal error"
 )
 
-func (r *GwRebuild) RebuildStatus() error {
+func (r *GwRebuild) RebuildStatus() {
 
 	//enum rebuild_request_body_return {REBUILD_UNPROCESSED=0, REBUILD_REBUILT=1, REBUILD_FAILED=2, REBUILD_ERROR=9};
 	/* REBUILD_UNPROCESSED - to continue to unchanged content */
 	/* REBUILD_REBUILT - to continue to rebuilt content */
 	/* REBUILD_FAILED - to report error and use supplied error report */
 	/* REBUILD_ERROR - to report  processing error */
-	b, err := r.FileLog()
-	if err != nil {
-		return err
-	}
+	b := r.LogFile
 
 	r.statusMessage = parseStatus(string(b))
-
-	return nil
 
 }
 
@@ -258,6 +310,11 @@ func parseStatus(b string) string {
 		if statusdesc != "" {
 			return statusdesc
 		}
+		statusdesc = parseLogExpir(s)
+		if statusdesc != "" {
+			return statusdesc
+		}
+
 	}
 
 	return "UNPROCESSABLE"
@@ -302,16 +359,6 @@ func (r *GwRebuild) GwFileLog() ([]byte, error) {
 	b, err := ioutil.ReadFile(fileLog)
 	if err != nil {
 		return nil, fmt.Errorf("glasswallCLIProcess.log fileLog file not found")
-	}
-	return b, nil
-
-}
-
-func (r *GwRebuild) FileLog() ([]byte, error) {
-
-	b, err := r.retrieveGwFile(".log")
-	if err != nil {
-		return nil, fmt.Errorf("log file not found")
 	}
 	return b, nil
 
@@ -396,4 +443,17 @@ func CliExitStatus(errCode int) string {
 
 	}
 
+}
+
+func parseLogExpir(s string) string {
+	str := "Zero day licence has expired"
+	if len(s) < len(str) {
+		return ""
+	}
+	offset := len(s) - len(str)
+	s = s[offset:]
+	if s == str {
+		return "EXPIRED"
+	}
+	return ""
 }

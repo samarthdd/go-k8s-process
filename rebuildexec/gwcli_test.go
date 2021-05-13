@@ -138,11 +138,9 @@ func newRebuild(filepath string) GwRebuild {
 	randPath := RandStringRunes(16)
 	f := openSampleFile(filepath)
 
-	rb := New(f, sampleFileName, randPath)
+	rb := New(f, sampleFileName, "*", randPath)
 	return rb
 }
-
-
 
 func moveFile(oldpath, newpath string) error {
 	var out bytes.Buffer
@@ -227,26 +225,21 @@ func TestGwCliExec(t *testing.T) {
 func TestRebuild(t *testing.T) {
 
 	//test with multiple file , conormed and managed
-var format []string
-    pdfFile:=".pdf"
-	pngFile:=".pnv"
-	DocFile:=".doc"
-	unsupportFileFormat:=".rar"
-	altredFile:="altred.pdf"
-   
-	for _,v range format {
-	rb := newRebuild(v)
-	err:=rb.Rebuild() 
+	var format = []string{
+		".pdf",
+		".pnv",
+		".doc",
+		".rar",
+		"altred.pdf",
+	}
 
-	rb.FileProcessed()
+	for _, v := range format {
+		rb := newRebuild(v)
+		err := rb.Rebuild()
+		if err != nil {
+			t.Errorf("")
+		}
 
-	rb.FileRreport()
-
-	rb.FileLog()
-
-	rb.GwFileLog()
-
-	rb.FileProcessed()
 	}
 }
 
@@ -317,6 +310,24 @@ func TestParseStatus(t *testing.T) {
 		}
 	}
 }
+
+/*
+func TestParseLogExpir(t *testing.T) {
+	LogTest := []struct {
+		log    string
+		status bool
+	}{
+		{LogFileExpir, "EXPIRED REBUILD SDK"},
+		{LogFileClean, ""},
+	}
+	for _, v := range LogTest {
+		res := parseLogExpir(v.log)
+		if res != v.status {
+			t.Errorf("fails expected %s got %s", v.status, res)
+		}
+	}
+}
+*/
 func TestParseVersion(t *testing.T) {
 	validVersionOutput := `1.221
 SUCCESS
@@ -345,6 +356,21 @@ SUCCESS
 
 		}
 	}
+}
+
+func TestRebuildFile(t *testing.T) {
+
+	f, _ := ioutil.ReadFile("/home/ibrahim/Desktop/demopdf/sample.pdf")
+	randPath := RandStringRunes(16)
+	fd := New(f, "samplee.pdf", "*", randPath)
+	err := fd.Rebuild()
+	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
+
+	if err != nil {
+		t.Error(err)
+
+	}
+
 }
 
 // test GwCli failure case
