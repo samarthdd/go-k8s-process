@@ -248,22 +248,6 @@ func PrintVersion() string {
 	return s
 }
 
-func sdkVersion() string {
-	app := os.Getenv("GWCLI")
-	args := fmt.Sprintf("%s -v", app)
-	cmd := exec.Command("sh", "-c", args)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-
-	cmd.Run()
-
-	s := string(out.Bytes())
-
-	log.Printf("\033[32m GW rebuild SDK version : %s\n", s)
-	return s
-
-}
-
 func RandStringRunes(n int) string {
 	b := make([]rune, n)
 	for i := range b {
@@ -271,13 +255,6 @@ func RandStringRunes(n int) string {
 	}
 	return string(b)
 }
-
-const (
-	clean             = "the file is clean"
-	cleaned           = " the file is clean by rebuild engine"
-	unprocessableFile = "the file is can't be prcesssed by the rebuild engine"
-	internalError     = "server internal error"
-)
 
 func (r *GwRebuild) RebuildStatus() {
 

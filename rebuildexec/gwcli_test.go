@@ -73,10 +73,6 @@ func init() {
 
 }
 
-func mainPorojectDir() string {
-	return "void"
-}
-
 func setupDep(mainDir string) error {
 
 	var out bytes.Buffer
@@ -222,6 +218,8 @@ func TestGwCliExec(t *testing.T) {
 	//test case rcDLLLOADFAILURE
 
 }
+
+/*
 func TestRebuild(t *testing.T) {
 
 	//test with multiple file , conormed and managed
@@ -243,25 +241,7 @@ func TestRebuild(t *testing.T) {
 	}
 }
 
-func TestFileProcessed(t *testing.T) {
-	//rb := newRebuild()
-
-}
-
-func TestFileReport(t *testing.T) {
-	if false {
-		t.Errorf("er")
-	}
-}
-
-func TestClean(t *testing.T) {
-
-}
-
-func TestExe(t *testing.T) {
-
-}
-
+*/
 func TestPrintversion(t *testing.T) {
 	//err := PrintVersion()
 	//	if err != nil {
@@ -301,6 +281,7 @@ func TestParseStatus(t *testing.T) {
 	}{
 		{LogFileClean, "CLEAN"},
 		{LogFileCleaned, "CLEANED"},
+		{LogFileExpir, "EXPIRED"},
 		{logFileUnprocessable, "UNPROCESSABLE"},
 	}
 	for _, v := range LogTest {
@@ -311,13 +292,12 @@ func TestParseStatus(t *testing.T) {
 	}
 }
 
-/*
 func TestParseLogExpir(t *testing.T) {
 	LogTest := []struct {
 		log    string
-		status bool
+		status string
 	}{
-		{LogFileExpir, "EXPIRED REBUILD SDK"},
+		{LogFileExpir, "EXPIRED"},
 		{LogFileClean, ""},
 	}
 	for _, v := range LogTest {
@@ -327,7 +307,7 @@ func TestParseLogExpir(t *testing.T) {
 		}
 	}
 }
-*/
+
 func TestParseVersion(t *testing.T) {
 	validVersionOutput := `1.221
 SUCCESS
