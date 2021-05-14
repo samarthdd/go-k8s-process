@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-ini/ini"
@@ -32,6 +33,7 @@ const (
 	FILETYPEKEY   = "fileType"
 )
 
+var once sync.Once
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 var rebuildSdkVersion string
@@ -39,10 +41,13 @@ var rebuildSdkVersion string
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	os.MkdirAll(INPUT, 0777)
-	rebuildSdkVersion = PrintVersion()
 }
 
 func GetSdkVersion() string {
+	once.Do(func() {
+		rebuildSdkVersion = GetVersion()
+	})
+
 	return rebuildSdkVersion
 }
 
@@ -232,7 +237,7 @@ func (r *GwRebuild) exe() error {
 	return nil
 }
 
-func PrintVersion() string {
+func GetVersion() string {
 
 	app := os.Getenv("GWCLI")
 	args := fmt.Sprintf("%s -v", app)
@@ -244,7 +249,6 @@ func PrintVersion() string {
 
 	s := parseVersion(string(b))
 
-	log.Printf("\033[32m GW rebuild SDK version : %s\n", s)
 	return s
 }
 

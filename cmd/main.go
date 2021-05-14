@@ -78,6 +78,8 @@ func main() {
 		zlog.Fatal().Err(err).Msg("error could not start minio client ")
 	}
 
+	log.Printf("\033[32m GW rebuild SDK version : %s\n", rebuildexec.GetSdkVersion())
+
 	forever := make(chan bool)
 
 	// Consume
