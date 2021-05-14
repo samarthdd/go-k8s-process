@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/go-ini/ini"
 )
 
 const (
@@ -28,10 +30,10 @@ const (
 	GwCliPath    = "sdk-rebuild-eval/tools/command.line.tool/linux/glasswallCLI"
 	GwEnginePath = "sdk-rebuild-eval/libs/rebuild/linux/libglasswall.classic.so"
 
-	CliExecConfigIni = "sample/testConfig.ini"
-	CliExecXmlonfig  = "sample/testConfig.xml"
-	rbuildInputTemp  = "/tmp/glrebuild/gwCliExecUnitTest/input"
-	rbuildOutputTemp = "/tmp/glrebuild/gwCliExecUnitTest/output"
+	CliExecConfigIni  = "sample/testConfig.ini"
+	CliExecXmlonfig   = "sample/testConfig.xml"
+	rebuildInputTemp  = "/tmp/glrebuild/gwCliExecUnitTest/input"
+	rebuildOutputTemp = "/tmp/glrebuild/gwCliExecUnitTest/output"
 
 	SamplePdfPath = "sample/sample.pdf"
 )
@@ -61,8 +63,8 @@ func init() {
 
 	projectDir := mainProjectPath
 
-	os.MkdirAll(filepath.Join(mainProjectPath, rbuildInputTemp), 0777)
-	os.MkdirAll(filepath.Join(mainProjectPath, rbuildOutputTemp), 0777)
+	os.MkdirAll(filepath.Join(mainProjectPath, rebuildInputTemp), 0777)
+	os.MkdirAll(filepath.Join(mainProjectPath, rebuildOutputTemp), 0777)
 
 	err := setupDep(projectDir)
 	if err != nil {
@@ -82,7 +84,7 @@ func setupDep(mainDir string) error {
 
 	absouluteDepDir := filepath.Join(mainDir, depDir)
 
-	cmd := exec.Command("cp", "-r", absouluteDepDir, filepath.Join(mainProjectPath, depDirTemp))
+	cmd := exec.Command("cp", "-r", absouluteDepDir, filepath.Join(mainProjectPath, "tmp"))
 	cmd.Stdout = &out
 	err := cmd.Run()
 	log.Println(string(out.Bytes()))
@@ -156,7 +158,7 @@ func moveFile(oldpath, newpath string) error {
 func TestGwCliExec(t *testing.T) {
 
 	pdfFilePath := filepath.Join(mainProjectPath, SamplePdfPath)
-	inputPdffilePath := filepath.Join(mainProjectPath, rbuildInputTemp, sampleFileName)
+	inputPdffilePath := filepath.Join(mainProjectPath, rebuildInputTemp, sampleFileName)
 	err := moveFile(pdfFilePath, inputPdffilePath)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -183,18 +185,20 @@ func TestGwCliExec(t *testing.T) {
 		{InvalidArgs, rcInvalidCommandLineDesc},
 		{ConfigLoadFailureArgs, rcConfigLoadFailureDesc},
 		{InvalidCliNameArgs, rcUnknownFormatedDesc},
+		{validArgs, rcProcessingIssueDesc}, // test with wrong inputPath and outputPath in config.ini input
 	}
 	for _, v := range execArgs {
 		_, err := gwCliExec(v.args)
 		if err != nil {
 			if err.Error() != v.result {
-				t.Errorf("test fails expected %s got %s", v.result, err.Error())
+				t.Errorf("test fails eExpected %s got %s", v.result, err.Error())
 			}
 		} else {
 			t.Errorf("test fails expected %s got %s", v.result, rcSucessDesc)
 		}
 	}
 
+	changeIniconfigToValidPath(iniConfig)
 	//test case with valid args
 	_, err = gwCliExec(validArgs)
 	if err != nil {
@@ -353,6 +357,33 @@ func TestRebuildFile(t *testing.T) {
 
 	}
 
+}
+
+func changeIniconfigToValidPath(path string) {
+	cfg, err := ini.Load(path)
+	if err != nil {
+		log.Printf("Fail to read ini file  %s", err)
+	}
+
+	sec := cfg.Section(SECTION)
+
+	inputValue := filepath.Join(mainProjectPath, rebuildInputTemp)
+	err = inikey(sec, INPUTKEY, inputValue)
+	if err != nil {
+		log.Printf("Fail to read ini key  %s", err)
+	}
+
+	outputValue := filepath.Join(mainProjectPath, rebuildOutputTemp)
+	err = inikey(sec, OUTPUTKEY, outputValue)
+	if err != nil {
+		log.Printf("Fail to read ini key  %s", err)
+	}
+
+	err = cfg.SaveTo(path)
+	if err != nil {
+		log.Printf("Fail to save ini file : %s", err)
+
+	}
 }
 
 // test GwCli failure case
