@@ -62,7 +62,7 @@ func TestProcessMessage(t *testing.T) {
 	d.ContentType = "text/plain"
 	d.Body = []byte(body)
 	t.Run("ProcessMessage", func(t *testing.T) {
-		ProcessMessage(d)
+		ProcessMessage(d.Headers)
 
 	})
 

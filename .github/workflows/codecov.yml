@@ -21,7 +21,9 @@ jobs:
               curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
               dep ensure
           fi
-
+      - name: Get Submodules
+        run: git submodule update --init
+        
       - name: TestCov
         run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
