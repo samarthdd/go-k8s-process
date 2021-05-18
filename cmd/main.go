@@ -66,8 +66,8 @@ var (
 type amqpHeadersCarrier map[string]interface{}
 
 func main() {
-	JeagerStatusEnv := os.Getenv("JeagerStatus")
-	if JeagerStatusEnv == "on" {
+	JeagerStatusEnv := os.Getenv("JAEGER_AGENT_ON")
+	if JeagerStatusEnv == "true" {
 		JeagerStatus = true
 	} else {
 		JeagerStatus = false
