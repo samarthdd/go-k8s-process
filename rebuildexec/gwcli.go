@@ -434,7 +434,7 @@ func parseLogExpir(s string) string {
 	offset := len(s) - len(str)
 	s = s[offset:]
 	if s == str {
-		return "SDk EXPIRED"
+		return "SDK EXPIRED"
 	}
 	return ""
 }
