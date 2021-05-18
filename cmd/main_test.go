@@ -30,7 +30,7 @@ type Delivery struct {
 }
 
 func TestProcessMessage(t *testing.T) {
-
+	JeagerStatus = false
 	fakeServer := server.NewServer("amqp://localhost:5672/%2f")
 	fakeServer.Start()
 
