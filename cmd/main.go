@@ -66,7 +66,12 @@ var (
 type amqpHeadersCarrier map[string]interface{}
 
 func main() {
-
+	JeagerStatusEnv := os.Getenv("JeagerStatus")
+	if JeagerStatusEnv == "on" {
+		JeagerStatus = true
+	} else {
+		JeagerStatus = false
+	}
 	// Get a connection
 	connection, err := rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
@@ -98,7 +103,7 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
-			JeagerStatus = true
+
 			if JeagerStatus == true {
 				tracer, closer := tracing.Init("process")
 				defer closer.Close()
