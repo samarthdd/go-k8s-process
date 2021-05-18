@@ -7,8 +7,7 @@ import (
 	"github.com/NeowayLabs/wabbit"
 	"github.com/NeowayLabs/wabbit/amqptest"
 	"github.com/NeowayLabs/wabbit/amqptest/server"
-	"github.com/k8-proxy/go-k8s-process/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracingtest "github.com/opentracing/opentracing-go"
 	"github.com/streadway/amqp"
 )
 
@@ -32,10 +31,8 @@ type Delivery struct {
 }
 
 func TestProcessMessage(t *testing.T) {
-	tracer, closer := tracing.Init("process")
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
-	ProcessTracer = tracer
+
+	ProcessTracer = opentracingtest.GlobalTracer()
 	fakeServer := server.NewServer("amqp://localhost:5672/%2f")
 	fakeServer.Start()
 
