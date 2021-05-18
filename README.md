@@ -26,6 +26,34 @@
 This is the service that will process/rebuild the file, as per the projet defined in [this repo](https://github.com/k8-proxy/go-k8s-infra)
 These pods are controlled the rebuild pods controller.
 
+### Dev section
+
+the k8-process add additional values to the rabbitmq header wich contain additional inforamtions :
+```
+- "rebuild-sdk-version" which is the sdk version
+```
+```
+- "rebuild-processing-status" which is the status of the rebuild processing operations there is five states values :
+
+ "UNPROCESSABLE" if the file can't be processed for example not supported file type
+ "CLEAN" if the original file is clean so it remain unchanged ,
+ "CLEANED" if the file is cleaned by the rebuil engine 
+ "INTERNALL ERROR" if there is error in the k8-process or the rebuilt ClI while procesing the file, 
+ "SDK EXPIRED" if the rebuilt SDK expired
+```
+```
+- "clean-presigned-url" which is the rebuilt file presigned url
+```
+```
+- "report-presigned-url" which is the report file presigned url
+```
+```
+- "gwlog-presigned-url" which is the glassWall log file presgined url
+```
+```
+- "log-pesined-url" which is the log file presgined url
+```
+
 ### Steps of processing
 - Listens on the processing request queue to get files pending for a rebuild
 - Get the file on queue
