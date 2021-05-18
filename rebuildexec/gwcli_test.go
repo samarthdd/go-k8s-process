@@ -287,7 +287,7 @@ func TestParseStatus(t *testing.T) {
 	}{
 		{LogFileClean, "CLEAN"},
 		{LogFileCleaned, "CLEANED"},
-		{LogFileExpir, "EXPIRED"},
+		{LogFileExpir, "SDK EXPIRED"},
 		{logFileUnprocessable, "UNPROCESSABLE"},
 	}
 	for _, v := range LogTest {
@@ -303,7 +303,7 @@ func TestParseLogExpir(t *testing.T) {
 		log    string
 		status string
 	}{
-		{LogFileExpir, "EXPIRED"},
+		{LogFileExpir, "SDK EXPIRED"},
 		{LogFileClean, ""},
 	}
 	for _, v := range LogTest {
