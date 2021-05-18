@@ -60,6 +60,7 @@ var (
 	helloTo       string
 	helloStr      string
 	ProcessTracer opentracing.Tracer
+	JeagerStatus  bool
 )
 
 type amqpHeadersCarrier map[string]interface{}
@@ -97,10 +98,13 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
-			tracer, closer := tracing.Init("process")
-			defer closer.Close()
-			opentracing.SetGlobalTracer(tracer)
-			ProcessTracer = tracer
+			JeagerStatus = true
+			if JeagerStatus == true {
+				tracer, closer := tracing.Init("process")
+				defer closer.Close()
+				opentracing.SetGlobalTracer(tracer)
+				ProcessTracer = tracer
+			}
 			zlog.Info().Msg("received message from queue ")
 
 			err := ProcessMessage(d.Headers)
@@ -129,7 +133,7 @@ func ProcessMessage(d amqp.Table) error {
 	fileID := d["file-id"].(string)
 	sourcePresignedURL := d["source-presigned-url"].(string)
 
-	if d["file-id"] != nil {
+	if d["file-id"] != nil && JeagerStatus == true {
 
 		if d["uber-trace-id"] != nil {
 
@@ -184,9 +188,12 @@ func ProcessMessage(d amqp.Table) error {
 	if publisher == nil {
 		return fmt.Errorf("couldn't start publisher")
 	}
-	span, _ := opentracing.StartSpanFromContext(ctx, "ProcessingOutcomeExchange")
-	defer span.Finish()
-	span.LogKV("event", "publish")
+	if JeagerStatus == true {
+
+		span, _ := opentracing.StartSpanFromContext(ctx, "ProcessingOutcomeExchange")
+		defer span.Finish()
+		span.LogKV("event", "publish")
+	}
 
 	err = rabbitmq.PublishMessage(publisher, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey, d, []byte(""))
 	if err != nil {
@@ -200,9 +207,11 @@ func ProcessMessage(d amqp.Table) error {
 }
 
 func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
-	span, _ := opentracing.StartSpanFromContext(ctx, "clirebuildProcess")
-	defer span.Finish()
-	span.LogKV("event", "clirebuildProcess")
+	if JeagerStatus == true {
+		span, _ := opentracing.StartSpanFromContext(ctx, "clirebuildProcess")
+		defer span.Finish()
+		span.LogKV("event", "clirebuildProcess")
+	}
 
 	randPath := rebuildexec.RandStringRunes(16)
 	fileTtype := "*" // wild card
@@ -277,9 +286,11 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 }
 
 func getFile(url string) ([]byte, error) {
-	span, _ := opentracing.StartSpanFromContext(ctx, "getFile")
-	defer span.Finish()
-	span.LogKV("event", "getFile")
+	if JeagerStatus == true {
+		span, _ := opentracing.StartSpanFromContext(ctx, "getFile")
+		defer span.Finish()
+		span.LogKV("event", "getFile")
+	}
 	if minioClient == nil {
 		return nil, fmt.Errorf("minio client not found")
 	}
@@ -304,9 +315,11 @@ func uploadMinio(file []byte, filename string) (string, error) {
 	if minioClient == nil {
 		return "", fmt.Errorf("minio client not found")
 	}
-	span, _ := opentracing.StartSpanFromContext(ctx, "uploadMinio")
-	defer span.Finish()
-	span.LogKV("event", "uploadMinio")
+	if JeagerStatus == true {
+		span, _ := opentracing.StartSpanFromContext(ctx, "uploadMinio")
+		defer span.Finish()
+		span.LogKV("event", "uploadMinio")
+	}
 	exist, err := minio.CheckIfBucketExists(minioClient, cleanMinioBucket)
 	if err != nil || !exist {
 		return "", err

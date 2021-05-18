@@ -7,7 +7,6 @@ import (
 	"github.com/NeowayLabs/wabbit"
 	"github.com/NeowayLabs/wabbit/amqptest"
 	"github.com/NeowayLabs/wabbit/amqptest/server"
-	opentracingtest "github.com/opentracing/opentracing-go"
 	"github.com/streadway/amqp"
 )
 
@@ -31,8 +30,7 @@ type Delivery struct {
 }
 
 func TestProcessMessage(t *testing.T) {
-
-	ProcessTracer = opentracingtest.GlobalTracer()
+	JeagerStatus = false
 	fakeServer := server.NewServer("amqp://localhost:5672/%2f")
 	fakeServer.Start()
 
