@@ -114,6 +114,7 @@ func main() {
 
 			err := ProcessMessage(d.Headers)
 			if err != nil {
+				processend(err)
 				zlog.Error().Err(err).Msg("error Failed to process message")
 			}
 
@@ -127,18 +128,19 @@ func main() {
 	<-forever
 
 }
+func processend(err error) {
+	if JeagerStatus == true && ctx != nil {
+		fmt.Println(err)
 
-func ProcessMessage(d amqp.Table) error {
-
-	if d["file-id"] == nil ||
-		d["source-presigned-url"] == nil {
-		return fmt.Errorf("Headers value is nil")
+		span, _ := opentracing.StartSpanFromContext(ctx, "ProcessingEndError")
+		defer span.Finish()
+		span.LogKV("event", err)
 	}
 
-	fileID := d["file-id"].(string)
-	sourcePresignedURL := d["source-presigned-url"].(string)
+}
 
-	if d["file-id"] != nil && JeagerStatus == true {
+func ProcessMessage(d amqp.Table) error {
+	if JeagerStatus == true {
 
 		if d["uber-trace-id"] != nil {
 
@@ -159,7 +161,12 @@ func ProcessMessage(d amqp.Table) error {
 				"go-k8s-process",
 				opentracing.FollowsFrom(spCtx),
 			)
-			helloTo = d["file-id"].(string)
+			if d["file-id"] == nil {
+				helloTo = "nil-file-id"
+			} else {
+				helloTo = d["file-id"].(string)
+
+			}
 			sp.SetTag("msg-procces", helloTo)
 			defer sp.Finish()
 			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -168,7 +175,12 @@ func ProcessMessage(d amqp.Table) error {
 			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
 
 		} else {
-			helloTo = d["file-id"].(string)
+			if d["file-id"] == nil {
+				helloTo = "nil-file-id"
+			} else {
+				helloTo = d["file-id"].(string)
+
+			}
 			span := ProcessTracer.StartSpan("go-k8s-process")
 			span.SetTag("msg-procces", helloTo)
 			defer span.Finish()
@@ -179,6 +191,14 @@ func ProcessMessage(d amqp.Table) error {
 
 		//helloStr = msgrecivedTrace(helloTo)
 	}
+
+	if d["file-id"] == nil ||
+		d["source-presigned-url"] == nil {
+		return fmt.Errorf("Headers value is nil")
+	}
+
+	fileID := d["file-id"].(string)
+	sourcePresignedURL := d["source-presigned-url"].(string)
 
 	f, err := getFile(sourcePresignedURL)
 	if err != nil {
@@ -195,7 +215,7 @@ func ProcessMessage(d amqp.Table) error {
 	}
 	if JeagerStatus == true {
 
-		span, _ := opentracing.StartSpanFromContext(ctx, "ProcessingOutcomeExchange")
+		span, _ := opentracing.StartSpanFromContext(ctx, "PublishOutExchange")
 		defer span.Finish()
 		span.LogKV("event", "publish")
 	}
@@ -212,8 +232,9 @@ func ProcessMessage(d amqp.Table) error {
 }
 
 func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
+	var span opentracing.Span
 	if JeagerStatus == true {
-		span, _ := opentracing.StartSpanFromContext(ctx, "clirebuildProcess")
+		span, _ = opentracing.StartSpanFromContext(ctx, "clirebuildProcess")
 		defer span.Finish()
 		span.LogKV("event", "clirebuildProcess")
 	}
@@ -225,6 +246,10 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 
 	if err != nil {
+		if JeagerStatus == true {
+
+			span.LogKV("Errror", err)
+		}
 		zlog.Error().Err(err).Msg("error failed to rebuild file")
 
 		return
@@ -323,7 +348,7 @@ func uploadMinio(file []byte, filename string) (string, error) {
 	if JeagerStatus == true {
 		span, _ := opentracing.StartSpanFromContext(ctx, "uploadMinio")
 		defer span.Finish()
-		span.LogKV("event", "uploadMinio")
+		span.LogKV("event", filename)
 	}
 	exist, err := minio.CheckIfBucketExists(minioClient, cleanMinioBucket)
 	if err != nil || !exist {
