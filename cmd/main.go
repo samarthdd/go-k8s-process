@@ -144,10 +144,6 @@ func ProcessMessage(d amqp.Table) error {
 
 		if d["uber-trace-id"] != nil {
 
-			spCtx1, _ := Extract(d)
-			if spCtx1 == nil {
-				fmt.Println("cpctxsub nil 2")
-			}
 			spCtx, ctxsuberr := ExtractWithTracer(d, ProcessTracer)
 			if spCtx == nil {
 				fmt.Println("cpctxsub nil 1")
