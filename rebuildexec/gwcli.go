@@ -449,16 +449,21 @@ func parseLogExpir(s string) string {
 }
 
 func (r *GwRebuild) event() error {
-	ev := events.EventManager{FileId: r.FileName}
+	var ev events.EventManager
+	ev = events.EventManager{FileId: r.FileName}
 	ev.NewDocument("00000000-0000-0000-0000-000000000000")
 
-	fileType := http.DetectContentType(r.File[:511])
+	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
 
-	ev.FileTypeDetected(fileType)
-	gwoutcome := gwoutcome(r.statusMessage)
+		fileType := http.DetectContentType(r.File[:511])
 
-	ev.RebuildStarted()
-	ev.RebuildCompleted(gwoutcome)
+		ev.FileTypeDetected(fileType)
+		gwoutcome := gwoutcome(r.statusMessage)
+
+		ev.RebuildStarted()
+		ev.RebuildCompleted(gwoutcome)
+	}
+
 	b, err := ev.MarshalJson()
 	if err != nil {
 
@@ -472,7 +477,6 @@ func gwoutcome(status string) string {
 	switch status {
 	case "CLEAN":
 		return "unmodified"
-
 	case "CLEANED":
 		return "replace"
 	case "UNPROCESSABLE":

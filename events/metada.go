@@ -61,7 +61,7 @@ func (e *EventManager) NewDocument(policyId string) {
 		Fileid:    e.FileId,
 		Mode:      1,
 		Policyid:  policyId,
-		Timestamp: Ti, // time.Now().Format(time.RFC3339),
+		Timestamp: time.Now().Format(time.RFC3339),
 	}
 	ev := Events{Properties: p}
 	e.event = append(e.event, ev)
@@ -72,7 +72,7 @@ func (e *EventManager) FileTypeDetected(Filetype string) {
 		Eventid:   FileTypeDetected,
 		Fileid:    e.FileId,
 		Filetype:  Filetype,
-		Timestamp: Ti, //time.Now().Format(time.RFC3339),
+		Timestamp: time.Now().Format(time.RFC3339),
 	}
 	ev := Events{Properties: p}
 	e.event = append(e.event, ev)
@@ -82,7 +82,7 @@ func (e *EventManager) RebuildStarted() {
 	p := Properties{
 		Eventid:   RebuildStarted,
 		Fileid:    e.FileId,
-		Timestamp: Ti, //time.Now().Format(time.RFC3339),
+		Timestamp: time.Now().Format(time.RFC3339),
 	}
 	ev := Events{Properties: p}
 	e.event = append(e.event, ev)
@@ -93,7 +93,7 @@ func (e *EventManager) RebuildCompleted(GwOutcome string) {
 		Eventid:   RebuildCompleted,
 		Fileid:    e.FileId,
 		Gwoutcome: GwOutcome,
-		Timestamp: Ti, //time.Now().Format(time.RFC3339),
+		Timestamp: time.Now().Format(time.RFC3339),
 	}
 	ev := Events{Properties: p}
 	e.event = append(e.event, ev)
