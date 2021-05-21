@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-ini/ini"
+	"github.com/k8-proxy/go-k8s-process/events"
 
 	zlog "github.com/rs/zerolog/log"
 )
@@ -63,6 +65,7 @@ type GwRebuild struct {
 	ReportFile  []byte
 	LogFile     []byte
 	GwLogFile   []byte
+	Metadata    []byte
 }
 
 func New(file []byte, fileName, fileType, randDir string) GwRebuild {
@@ -105,6 +108,8 @@ func (r *GwRebuild) Rebuild() error {
 	err := setupDirs(r.workDir)
 	if err != nil {
 		r.statusMessage = "INTERNAL ERROR"
+		r.event()
+
 		return err
 	}
 
@@ -113,12 +118,15 @@ func (r *GwRebuild) Rebuild() error {
 	err = ioutil.WriteFile(path, r.File, 0666)
 	if err != nil {
 		r.statusMessage = "INTERNAL ERROR"
+		r.event()
+
 		return err
 	}
 	err = r.exe()
 
 	if err != nil {
 		r.statusMessage = "INTERNAL ERROR"
+		r.event()
 
 		return err
 	}
@@ -139,6 +147,7 @@ func (r *GwRebuild) Rebuild() error {
 		r.FileProcessed()
 
 		r.RebuildStatus()
+		r.event()
 
 	}
 
@@ -435,6 +444,41 @@ func parseLogExpir(s string) string {
 	s = s[offset:]
 	if s == str {
 		return "SDK EXPIRED"
+	}
+	return ""
+}
+
+func (r *GwRebuild) event() error {
+	ev := events.EventManager{FileId: r.FileName}
+	ev.NewDocument("00000000-0000-0000-0000-000000000000")
+
+	fileType := http.DetectContentType(r.File[:511])
+
+	ev.FileTypeDetected(fileType)
+	gwoutcome := gwoutcome(r.statusMessage)
+
+	ev.RebuildStarted()
+	ev.RebuildCompleted(gwoutcome)
+	b, err := ev.MarshalJson()
+	if err != nil {
+
+		return err
+	}
+	r.Metadata = b
+	return nil
+}
+
+func gwoutcome(status string) string {
+	switch status {
+	case "CLEAN":
+		return "unmodified"
+
+	case "CLEANED":
+		return "replace"
+	case "UNPROCESSABLE":
+		return "unmodified"
+	case "SDK EXPIRED", "INTERNAL ERROR":
+		return "failed"
 	}
 	return ""
 }
