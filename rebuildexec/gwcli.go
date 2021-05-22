@@ -141,15 +141,16 @@ func (r *GwRebuild) Rebuild() error {
 
 		if err != nil {
 			r.statusMessage = "INTERNAL ERROR"
+			r.event()
 
 			return err
 		}
 		r.FileProcessed()
 
 		r.RebuildStatus()
-		r.event()
 
 	}
+	r.event()
 
 	return nil
 }
@@ -455,7 +456,7 @@ func (r *GwRebuild) event() error {
 
 	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
 
-		fileType := http.DetectContentType(r.File[:511])
+		fileType := parseContnetType(http.DetectContentType(r.File[:511]))
 
 		ev.FileTypeDetected(fileType)
 		gwoutcome := gwoutcome(r.statusMessage)
@@ -485,4 +486,11 @@ func gwoutcome(status string) string {
 		return "failed"
 	}
 	return ""
+}
+func parseContnetType(s string) string {
+	sl := strings.Split(s, "/")
+	if len(sl) > 1 {
+		return sl[1]
+	}
+	return s
 }
