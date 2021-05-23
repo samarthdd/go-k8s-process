@@ -38,10 +38,16 @@ func (z *zipProcess) openZip(path string) error {
 		if err != nil {
 			return err
 		}
+		fName := f.Name
+		if fName[len(fName)-1] == '/' {
+			rc.Close()
+			continue
+		}
+
 		zh := ziphelper{
 			b:        nil,
-			fullName: f.Name,
-			name:     filepath.Base(f.Name),
+			fullName: fName,
+			name:     filepath.Base(fName),
 		}
 		z.zipEntity = append(z.zipEntity, zh)
 
@@ -61,21 +67,21 @@ func (z *zipProcess) openZip(path string) error {
 	return nil
 }
 
-func (z *zipProcess) openAllFilesExt(extFolder string) error {
+func (z *zipProcess) readAllFilesExt(extFolder string) {
 	var err error
-	for _, v := range z.zipEntity {
-		p := filepath.Join(z.workdir, extFolder, v.name)
-		fp := fmt.Sprintf("%s%s", p, z.ext)
-		v.b, err = ioutil.ReadFile(fp)
+	for i := 0; i < len(z.zipEntity); i++ {
+		p := filepath.Join(z.workdir, extFolder, z.zipEntity[i].name)
+		fp := fmt.Sprintf("%s.%s", p, z.ext)
+		z.zipEntity[i].b, err = ioutil.ReadFile(fp)
 		if err != nil {
-			return err
+			log.Println(err)
 		}
 	}
 
-	return nil
 }
 
 func (z *zipProcess) writeZip(zipFileName string) {
+	ext := z.ext
 	buf := new(bytes.Buffer)
 
 	// Create a new zip archive.
@@ -84,8 +90,16 @@ func (z *zipProcess) writeZip(zipFileName string) {
 	// Add some files to the archive.
 
 	for _, zh := range z.zipEntity {
+		if zh.b == nil {
+			continue
+		}
 
-		f, err := w.Create(zh.fullName)
+		fName := zh.fullName
+		if ext != "" {
+			fName = zh.name
+		}
+		f, err := w.Create(fName)
+
 		if err != nil {
 			log.Fatal(err)
 		}

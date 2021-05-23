@@ -115,6 +115,7 @@ func (r *GwRebuild) Rebuild() error {
 		r.statusMessage = "INTERNAL ERROR"
 		return err
 	}
+
 	err = r.exe()
 
 	if err != nil {
