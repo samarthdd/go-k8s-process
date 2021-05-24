@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type zipProcess struct {
@@ -71,7 +72,7 @@ func (z *zipProcess) readAllFilesExt(extFolder string) {
 	var err error
 	for i := 0; i < len(z.zipEntity); i++ {
 		p := filepath.Join(z.workdir, extFolder, z.zipEntity[i].name)
-		fp := fmt.Sprintf("%s.%s", p, z.ext)
+		fp := fmt.Sprintf("%s%s", p, z.ext)
 		z.zipEntity[i].b, err = ioutil.ReadFile(fp)
 		if err != nil {
 			log.Println(err)
@@ -80,7 +81,9 @@ func (z *zipProcess) readAllFilesExt(extFolder string) {
 
 }
 
-func (z *zipProcess) writeZip(zipFileName string) {
+func (z *zipProcess) writeZip(zipFileName string) error {
+	empty := true
+
 	ext := z.ext
 	buf := new(bytes.Buffer)
 
@@ -93,29 +96,44 @@ func (z *zipProcess) writeZip(zipFileName string) {
 		if zh.b == nil {
 			continue
 		}
-
+		empty = false
 		fName := zh.fullName
 		if ext != "" {
-			fName = zh.name
+			fName = fmt.Sprintf("%s%s", zh.name, ext)
 		}
-		f, err := w.Create(fName)
+
+		h := zip.FileHeader{
+			Name: fName,
+
+			Modified: time.Now(),
+		}
+
+		f, err := w.CreateHeader(&h)
 
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		_, err = f.Write(zh.b)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
 	err := w.Close()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	b, err := ioutil.ReadAll(buf)
 
+	if empty {
+		return fmt.Errorf("there is no log files ")
+	}
+
+	b, err := ioutil.ReadAll(buf)
+	if err != nil {
+		return err
+	}
 	zipFilePath := filepath.Join(z.workdir, zipFileName)
-	os.WriteFile(zipFilePath, b, 0777)
+	err = os.WriteFile(zipFilePath, b, 0777)
+	return err
 
 }
 

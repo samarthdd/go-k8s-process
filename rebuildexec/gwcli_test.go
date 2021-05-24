@@ -386,6 +386,21 @@ func changeIniconfigToValidPath(path string) {
 	}
 }
 
+func TestRebuildZip(t *testing.T) {
+	zipPath := "/home/ibrahim/Desktop/gwsample/UntitledFolder/nest.zip"
+	f, _ := ioutil.ReadFile(zipPath)
+	randPath := RandStringRunes(16)
+	fd := New(f, "nest.zip", "zip", randPath)
+	err := fd.Rebuild()
+	log.Printf("\033[34m rebuild status a is  : %s\n", fd.PrintStatus())
+
+	if err != nil {
+		t.Error(err)
+
+	}
+
+}
+
 // test GwCli failure case
 // test GwCli with multiple file type
 // add nonconfomed states

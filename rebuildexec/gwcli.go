@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,6 +70,14 @@ func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 
 	fullpath := filepath.Join(INPUT, randDir)
 
+	if len(file) > 512 {
+		c := http.DetectContentType(file[:511])
+		if c == "application/zip" {
+			fileType = "zip"
+		}
+
+	}
+
 	gwRebuild := GwRebuild{
 		File:     file,
 		FileName: fileName,
@@ -116,13 +125,41 @@ func (r *GwRebuild) Rebuild() error {
 		return err
 	}
 
-	err = r.exe()
+	if r.FileType == "zip" {
+		zipProc := zipProcess{
+			workdir:   filepath.Dir(path),
+			zipEntity: nil,
+			ext:       "",
+		}
+		err = r.extractZip(&zipProc)
+		if err != nil {
+			r.statusMessage = "INTERNAL ERROR"
 
-	if err != nil {
-		r.statusMessage = "INTERNAL ERROR"
+			return err
+		}
 
-		return err
+		err = r.exe()
+		if err != nil {
+			r.statusMessage = "INTERNAL ERROR"
+
+			return err
+		}
+
+		r.zipAll(zipProc, "")
+		r.zipAll(zipProc, ".xml")
+		r.zipAll(zipProc, ".log")
+
+	} else {
+
+		err = r.exe()
+
+		if err != nil {
+			r.statusMessage = "INTERNAL ERROR"
+
+			return err
+		}
 	}
+
 	r.FileProcessed()
 
 	if r.LogFile != nil {
@@ -215,9 +252,11 @@ func (r *GwRebuild) exe() error {
 		return err
 	}
 
-	err = inikey(sec, FILETYPEKEY, r.FileType)
-	if err != nil {
-		return err
+	if r.FileType != "zip" {
+		err = inikey(sec, FILETYPEKEY, r.FileType)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = cfg.SaveTo(randConfigini)
@@ -271,6 +310,12 @@ func (r *GwRebuild) RebuildStatus() {
 	b := r.LogFile
 
 	r.statusMessage = parseStatus(string(b))
+
+	if r.FileType == "zip" {
+		if r.statusMessage == "CLEAN" || r.statusMessage == "UNPROCESSABLE" {
+			r.statusMessage = "CLEANED"
+		}
+	}
 
 }
 
@@ -347,7 +392,11 @@ func (r *GwRebuild) GwFileLog() ([]byte, error) {
 }
 
 func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
-
+	if r.FileType == "zip" {
+		if len(fileNameExt) > 1 {
+			fileNameExt = fileNameExt[1:]
+		}
+	}
 	pathManaged := fmt.Sprintf("%s/%s/%s/%s%s", r.workDir, REBUILDOUTPUT, MANAGED, r.FileName, fileNameExt)
 	pathNonconforming := fmt.Sprintf("%s/%s/%s/%s%s", r.workDir, REBUILDOUTPUT, NONCONFORMING, r.FileName, fileNameExt)
 
@@ -438,4 +487,34 @@ func parseLogExpir(s string) string {
 		return "SDK EXPIRED"
 	}
 	return ""
+}
+
+func (r *GwRebuild) extractZip(z *zipProcess) error {
+	err := z.openZip(r.FileName)
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(filepath.Join(z.workdir, r.FileName))
+
+	return nil
+}
+
+func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
+	path := fmt.Sprintf("%s/%s", r.workDir, REBUILDOUTPUT)
+
+	z.ext = ext
+	z.workdir = path
+	z.readAllFilesExt(NONCONFORMING)
+	z.readAllFilesExt(MANAGED)
+
+	if len(ext) > 1 {
+		ext = ext[1:]
+	}
+
+	outName := fmt.Sprintf("%s%s", r.FileName, ext)
+	z.workdir = filepath.Join(path, MANAGED)
+	err := z.writeZip(outName)
+
+	return err
 }
