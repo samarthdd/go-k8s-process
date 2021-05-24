@@ -387,10 +387,12 @@ func changeIniconfigToValidPath(path string) {
 }
 
 func TestRebuildZip(t *testing.T) {
-	zipPath := "/home/ibrahim/Desktop/gwsample/UntitledFolder/nest.zip"
+
+	zipPath := filepath.Join(mainProjectPath, depDirTemp, "nested.zip")
+
 	f, _ := ioutil.ReadFile(zipPath)
 	randPath := RandStringRunes(16)
-	fd := New(f, "nest.zip", "zip", randPath)
+	fd := New(f, "nested.zip", "zip", randPath)
 	err := fd.Rebuild()
 	log.Printf("\033[34m rebuild status a is  : %s\n", fd.PrintStatus())
 
