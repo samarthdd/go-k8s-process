@@ -528,6 +528,7 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 	err := z.writeZip(outName)
 
 	return err
+}
 func (r *GwRebuild) event() error {
 	var ev events.EventManager
 	ev = events.EventManager{FileId: r.FileName}
