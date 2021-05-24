@@ -63,6 +63,10 @@ var (
 	JeagerStatus  bool
 )
 
+const (
+	presignedUrlExpireIn = time.Hour * 24
+)
+
 type amqpHeadersCarrier map[string]interface{}
 
 func main() {
@@ -356,8 +360,7 @@ func uploadMinio(file []byte, filename string) (string, error) {
 		return "", errm
 	}
 
-	expirein := time.Second * 60 * 2
-	urlx, err := minio.GetPresignedURLForObject(minioClient, cleanMinioBucket, filename, expirein)
+	urlx, err := minio.GetPresignedURLForObject(minioClient, cleanMinioBucket, filename, presignedUrlExpireIn)
 	if err != nil {
 		return "", err
 
