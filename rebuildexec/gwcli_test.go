@@ -400,7 +400,7 @@ func TestRebuildZip(t *testing.T) {
 		t.Error(err)
 
 	}
-
+}
 func TestParseContnetType(t *testing.T) {
 	nonCompatible := "pdf"
 	validPdf := "application/pdf"
