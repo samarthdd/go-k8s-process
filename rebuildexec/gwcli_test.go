@@ -386,6 +386,21 @@ func changeIniconfigToValidPath(path string) {
 	}
 }
 
+func TestRebuildZip(t *testing.T) {
+
+	zipPath := filepath.Join(mainProjectPath, depDirTemp, "nested.zip")
+
+	f, _ := ioutil.ReadFile(zipPath)
+	randPath := RandStringRunes(16)
+	fd := New(f, "nested.zip", "zip", randPath)
+	err := fd.Rebuild()
+	log.Printf("\033[34m rebuild status a is  : %s\n", fd.PrintStatus())
+
+	if err != nil {
+		t.Error(err)
+
+	}
+}
 func TestParseContnetType(t *testing.T) {
 	nonCompatible := "pdf"
 	validPdf := "application/pdf"
@@ -406,7 +421,3 @@ func TestParseContnetType(t *testing.T) {
 	}
 }
 
-// test GwCli failure case
-// test GwCli with multiple file type
-// add nonconfomed states
-// add benchmark and processing info

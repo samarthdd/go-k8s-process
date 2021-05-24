@@ -244,7 +244,6 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
 	err := fd.Rebuild()
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
-
 	if err != nil {
 		if JeagerStatus == true {
 
@@ -271,8 +270,12 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 			zlog.Error().Msg("error rebuildexec fileRreport function")
 
 		} else {
+			fileExt := ".xml"
+			if fd.FileType == "zip" {
+				fileExt = "xml"
+			}
 
-			minioUploadProcess(report, fileid, ".xml", "report-presigned-url", d)
+			minioUploadProcess(report, fileid, fileExt, "report-presigned-url", d)
 		}
 
 	}
@@ -304,7 +307,12 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 		zlog.Error().Msg("error rebuildexec GwFileLog function")
 
 	} else {
-		minioUploadProcess(logFile, fileid, ".log", "log-presigned-url", d)
+		fileExt := ".log"
+		if fd.FileType == "zip" {
+			fileExt = "log"
+		}
+
+		minioUploadProcess(logFile, fileid, fileExt, "log-presigned-url", d)
 
 	}
 
