@@ -308,6 +308,16 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	}
 
+	metaDataFile := fd.Metadata
+	if metaDataFile == nil {
+
+		zlog.Error().Msg("error rebuildexec GwFileLog function")
+
+	} else {
+		minioUploadProcess(metaDataFile, fileid, ".metadata.json", "metadata-presigned-url", d)
+
+	}
+
 	err = fd.Clean()
 	if err != nil {
 		zlog.Error().Err(err).Msg("error rebuildexec Clean function : %s")
@@ -372,19 +382,20 @@ func uploadMinio(file []byte, filename string) (string, error) {
 
 func minioUploadProcess(file []byte, baseName, extName, headername string, d amqp.Table) {
 
-	reportid := fmt.Sprintf("%s%s", baseName, extName)
+	minioFileId := fmt.Sprintf("%s%s", baseName, extName)
 
-	urlr, err := uploadMinio(file, reportid)
+	urlr, err := uploadMinio(file, minioFileId)
 	if err != nil {
-		m := fmt.Sprintf("failed to upload %s file to Minio", extName)
+		m := fmt.Sprintf("failed to upload %s file to Minio", minioFileId)
 		zlog.Info().Msg(m)
 		return
 	}
-	m := fmt.Sprintf("%s file uploaded to minio successfully", extName)
+	m := fmt.Sprintf("%s file uploaded to minio successfully", minioFileId)
 
 	zlog.Info().Msg(m)
 	d[headername] = urlr
 }
+
 func tracest(msg string) {
 	tracer, closer := tracing.Init("process")
 	defer closer.Close()
