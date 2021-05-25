@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestOpenZip(t *testing.T) {
+func TestZipProcess(t *testing.T) {
 
 	zipfileCopy()
 	zipPath := filepath.Join(mainProjectPath, "/tmp/zip/input")
@@ -28,6 +28,10 @@ func TestOpenZip(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
+	t.Cleanup(func() {
+		os.RemoveAll(filepath.Join(mainProjectPath, "/tmp/zip"))
+	})
 
 }
 

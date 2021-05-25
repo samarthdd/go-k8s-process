@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -32,8 +31,6 @@ func (z *zipProcess) openZip(path string) error {
 
 	defer r.Close()
 
-	// Iterate through the files in the archive,
-	// printing some of their contents.
 	for _, f := range r.File {
 		rc, err := f.Open()
 		if err != nil {
@@ -69,14 +66,11 @@ func (z *zipProcess) openZip(path string) error {
 }
 
 func (z *zipProcess) readAllFilesExt(extFolder string) {
-	var err error
 	for i := 0; i < len(z.zipEntity); i++ {
 		p := filepath.Join(z.workdir, extFolder, z.zipEntity[i].name)
 		fp := fmt.Sprintf("%s%s", p, z.ext)
-		z.zipEntity[i].b, err = ioutil.ReadFile(fp)
-		if err != nil {
-			log.Println(err)
-		}
+		z.zipEntity[i].b, _ = ioutil.ReadFile(fp)
+
 	}
 
 }
@@ -87,10 +81,7 @@ func (z *zipProcess) writeZip(zipFileName string) error {
 	ext := z.ext
 	buf := new(bytes.Buffer)
 
-	// Create a new zip archive.
 	w := zip.NewWriter(buf)
-
-	// Add some files to the archive.
 
 	for _, zh := range z.zipEntity {
 		if zh.b == nil {
@@ -124,7 +115,7 @@ func (z *zipProcess) writeZip(zipFileName string) error {
 	}
 
 	if empty {
-		return fmt.Errorf("there is no log files ")
+		return fmt.Errorf("there is no files to compress")
 	}
 
 	b, err := ioutil.ReadAll(buf)
@@ -136,21 +127,3 @@ func (z *zipProcess) writeZip(zipFileName string) error {
 	return err
 
 }
-
-func (r *GwRebuild) zipRebuildFiles() {
-
-}
-
-func (r *GwRebuild) zipReports() {
-
-}
-
-func (r *GwRebuild) zipLogs() {
-}
-
-//copy zip file to input
-//extract zip files to input with ilepath.Base
-//rebuild files
-//zip rebuilt files with the full path
-//zip report files
-//zip log files
