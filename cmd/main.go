@@ -254,8 +254,10 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 		return
 	}
 
-	d["rebuild-processing-status"] = fd.PrintStatus()
+	status := fd.PrintStatus()
+	d["rebuild-processing-status"] = status
 	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
+	d["file-outcome"] = rebuildexec.Gwoutcome(status)
 
 	zlog.Info().Msg("file rebuilt process  successfully ")
 
