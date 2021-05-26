@@ -1,7 +1,6 @@
 package rebuildexec
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,8 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-ini/ini"
@@ -35,22 +32,9 @@ const (
 	FILETYPEKEY   = "fileType"
 )
 
-var once sync.Once
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-var rebuildSdkVersion string
-
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	os.MkdirAll(INPUT, 0777)
-}
-
-func GetSdkVersion() string {
-	once.Do(func() {
-		rebuildSdkVersion = GetVersion()
-	})
-
-	return rebuildSdkVersion
 }
 
 type GwRebuild struct {
@@ -140,7 +124,7 @@ func (r *GwRebuild) Rebuild() error {
 		err = r.extractZip(&zipProc)
 		if err != nil {
 			r.statusMessage = "INTERNAL ERROR"
-		r.event()
+			r.event()
 
 			return err
 		}
@@ -148,7 +132,7 @@ func (r *GwRebuild) Rebuild() error {
 		err = r.exe()
 		if err != nil {
 			r.statusMessage = "INTERNAL ERROR"
-		r.event()
+			r.event()
 
 			return err
 		}
@@ -163,7 +147,7 @@ func (r *GwRebuild) Rebuild() error {
 
 		if err != nil {
 			r.statusMessage = "INTERNAL ERROR"
-		r.event()
+			r.event()
 
 			return err
 		}
@@ -288,29 +272,6 @@ func (r *GwRebuild) exe() error {
 	return nil
 }
 
-func GetVersion() string {
-
-	app := os.Getenv("GWCLI")
-	args := fmt.Sprintf("%s -v", app)
-
-	b, err := gwCliExec(args)
-	if err != nil {
-		b = []byte(err.Error())
-	}
-
-	s := parseVersion(string(b))
-
-	return s
-}
-
-func RandStringRunes(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(b)
-}
-
 func (r *GwRebuild) RebuildStatus() {
 
 	//enum rebuild_request_body_return {REBUILD_UNPROCESSED=0, REBUILD_REBUILT=1, REBUILD_FAILED=2, REBUILD_ERROR=9};
@@ -328,60 +289,6 @@ func (r *GwRebuild) RebuildStatus() {
 		}
 	}
 
-}
-
-func (r *GwRebuild) GwparseLog(b []byte) {
-
-}
-
-func parseStatus(b string) string {
-
-	if len(b) > 200 {
-
-		b = (b[(len(b) - 200):])
-
-	}
-
-	sl := strings.Split(string(b), "\n")
-	for _, s := range sl {
-		statusdesc := parseCode(s)
-		if statusdesc != "" {
-			return statusdesc
-		}
-		statusdesc = parseLogExpir(s)
-		if statusdesc != "" {
-			return statusdesc
-		}
-
-	}
-
-	return "UNPROCESSABLE"
-
-}
-
-func parseCode(s string) string {
-
-	str := "Glasswall process exit status = "
-	if len(s) < len(str) {
-		return ""
-	}
-	d := s[:len(str)]
-	log.Println(d)
-	if s[:len(str)] != str {
-		return ""
-	}
-
-	s = s[len(str):]
-
-	var statusDesc string
-
-	for _, c := range s {
-
-		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
-			statusDesc = fmt.Sprintf("%s%s", statusDesc, string(c))
-		}
-	}
-	return statusDesc
 }
 
 func (r GwRebuild) PrintStatus() string {
@@ -423,83 +330,6 @@ func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
 
 }
 
-func parseVersion(b string) string {
-	sl := strings.Split(string(b), "\n")
-
-	if len(sl) > 0 {
-		return sl[0]
-	}
-	return ""
-}
-
-func gwCliExec(args string) ([]byte, error) {
-	cmd := exec.Command("sh", "-c", args)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-
-	err := cmd.Run()
-
-	if err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			exitStarusDesc := CliExitStatus(exitError.ExitCode())
-			return nil, fmt.Errorf(exitStarusDesc)
-		}
-		return nil, err
-	}
-
-	b := out.Bytes()
-	return b, nil
-}
-
-const (
-	rcSucess = iota
-	rcInvalidCommandLine
-	rcDllLoadFailure
-	rcConfigLoadFailure
-	rcProcessingIssue
-)
-
-const (
-	rcSucessDesc             = "rcSucessDesc : Test completed successfully"
-	rcInvalidCommandLineDesc = "rcInvalidCommandLineDesc : Command line argument is invalid"
-	rcDllLoadFailureDesc     = "rcDllLoadFailureDesc :Problem loading the DLL/Shared library"
-	rcConfigLoadFailureDesc  = "rcConfigLoadFailureDesc : Problem loading the specified configuration file"
-	rcProcessingIssueDesc    = "rcProcessingIssueDesc : Problem processing the specified files"
-	unkownExitStatusCode     = "unknown exit status code"
-)
-
-func CliExitStatus(errCode int) string {
-	switch errCode {
-	case rcSucess:
-		return rcSucessDesc
-	case rcInvalidCommandLine:
-		return rcInvalidCommandLineDesc
-	case rcDllLoadFailure:
-		return rcDllLoadFailureDesc
-	case rcConfigLoadFailure:
-		return rcConfigLoadFailureDesc
-	case rcProcessingIssue:
-		return rcProcessingIssueDesc
-	default:
-		return fmt.Sprintf("%s : %v", unkownExitStatusCode, errCode)
-
-	}
-
-}
-
-func parseLogExpir(s string) string {
-	str := "Zero day licence has expired"
-	if len(s) < len(str) {
-		return ""
-	}
-	offset := len(s) - len(str)
-	s = s[offset:]
-	if s == str {
-		return "SDK EXPIRED"
-	}
-	return ""
-}
-
 func (r *GwRebuild) extractZip(z *zipProcess) error {
 	err := z.openZip(r.FileName)
 	if err != nil {
@@ -529,6 +359,7 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 
 	return err
 }
+
 func (r *GwRebuild) event() error {
 	var ev events.EventManager
 	ev = events.EventManager{FileId: r.FileName}
@@ -566,11 +397,4 @@ func gwoutcome(status string) string {
 		return "failed"
 	}
 	return ""
-}
-func parseContnetType(s string) string {
-	sl := strings.Split(s, "/")
-	if len(sl) > 1 {
-		return sl[1]
-	}
-	return s
 }
