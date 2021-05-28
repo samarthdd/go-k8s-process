@@ -74,27 +74,6 @@ func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 	return gwRebuild
 }
 
-func setupDirs(workDir string) error {
-
-	err := os.MkdirAll(workDir, 0777)
-	if err != nil {
-		return err
-	}
-
-	inputRebuildpath := filepath.Join(workDir, REBUILDINPUT)
-	err = os.MkdirAll(inputRebuildpath, 0777)
-	if err != nil {
-		return err
-	}
-	outputRebuildpath := filepath.Join(workDir, REBUILDOUTPUT)
-
-	err = os.MkdirAll(outputRebuildpath, 0777)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r *GwRebuild) Rebuild() error {
 
 	err := setupDirs(r.workDir)
@@ -153,10 +132,10 @@ func (r *GwRebuild) Rebuild() error {
 		}
 	}
 
-	r.FileProcessed()
+	r.fileProcessed()
 
 	if r.LogFile != nil {
-		r.RebuildStatus()
+		r.rebuildStatus()
 
 	} else {
 		r.FileType = "pdf"
@@ -168,22 +147,44 @@ func (r *GwRebuild) Rebuild() error {
 
 			return err
 		}
-		r.FileProcessed()
+		r.fileProcessed()
 
-		r.RebuildStatus()
+		r.rebuildStatus()
 
 	}
 	r.event()
+	r.clean()
 
 	return nil
 }
 
-func (r *GwRebuild) Clean() error {
+func setupDirs(workDir string) error {
+
+	err := os.MkdirAll(workDir, 0777)
+	if err != nil {
+		return err
+	}
+
+	inputRebuildpath := filepath.Join(workDir, REBUILDINPUT)
+	err = os.MkdirAll(inputRebuildpath, 0777)
+	if err != nil {
+		return err
+	}
+	outputRebuildpath := filepath.Join(workDir, REBUILDOUTPUT)
+
+	err = os.MkdirAll(outputRebuildpath, 0777)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *GwRebuild) clean() error {
 	err := os.RemoveAll(r.workDir)
 	return err
 }
 
-func (r *GwRebuild) FileProcessed() {
+func (r *GwRebuild) fileProcessed() {
 	var err error
 	r.RebuiltFile, err = r.retrieveGwFile("")
 	if err != nil {
@@ -200,7 +201,7 @@ func (r *GwRebuild) FileProcessed() {
 		zlog.Error().Err(err).Msg("log file not found")
 	}
 
-	r.GwLogFile, err = r.GwFileLog()
+	r.GwLogFile, err = r.gwFileLog()
 	if err != nil {
 		zlog.Error().Err(err).Msg("gw log file not found")
 	}
@@ -272,7 +273,7 @@ func (r *GwRebuild) exe() error {
 	return nil
 }
 
-func (r *GwRebuild) RebuildStatus() {
+func (r *GwRebuild) rebuildStatus() {
 
 	//enum rebuild_request_body_return {REBUILD_UNPROCESSED=0, REBUILD_REBUILT=1, REBUILD_FAILED=2, REBUILD_ERROR=9};
 	/* REBUILD_UNPROCESSED - to continue to unchanged content */
@@ -297,7 +298,7 @@ func (r GwRebuild) PrintStatus() string {
 	return s
 }
 
-func (r *GwRebuild) GwFileLog() ([]byte, error) {
+func (r *GwRebuild) gwFileLog() ([]byte, error) {
 
 	fileLog := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDOUTPUT, "glasswallCLIProcess.log")
 
