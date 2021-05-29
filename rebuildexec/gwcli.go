@@ -32,6 +32,14 @@ const (
 	FILETYPEKEY   = "fileType"
 )
 
+const (
+	RebuildStatusInternalError = "INTERNAL ERROR"
+	RebuildStatusClean         = "CLEAN"
+	RebuildStatusCleaned       = "CLEANED"
+	RebuildStatusUnprocessable = "UNPROCESSABLE"
+	RebuildStatusExpired       = "SDK EXPIRED"
+)
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	os.MkdirAll(INPUT, 0777)
@@ -55,13 +63,8 @@ type GwRebuild struct {
 func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 
 	fullpath := filepath.Join(INPUT, randDir)
-
-	if len(file) > 512 {
-		c := http.DetectContentType(file[:511])
-		if c == "application/zip" {
-			fileType = "zip"
-		}
-
+	if getContentType(file) == "zip" {
+		fileType = "zip"
 	}
 
 	gwRebuild := GwRebuild{
@@ -75,11 +78,11 @@ func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 }
 
 func (r *GwRebuild) Rebuild() error {
+	defer r.Event()
 
 	err := setupDirs(r.workDir)
 	if err != nil {
-		r.statusMessage = "INTERNAL ERROR"
-		r.event()
+		r.statusMessage = RebuildStatusInternalError
 
 		return err
 	}
@@ -88,8 +91,7 @@ func (r *GwRebuild) Rebuild() error {
 
 	err = ioutil.WriteFile(path, r.File, 0666)
 	if err != nil {
-		r.statusMessage = "INTERNAL ERROR"
-		r.event()
+		r.statusMessage = RebuildStatusInternalError
 
 		return err
 	}
@@ -102,16 +104,14 @@ func (r *GwRebuild) Rebuild() error {
 		}
 		err = r.extractZip(&zipProc)
 		if err != nil {
-			r.statusMessage = "INTERNAL ERROR"
-			r.event()
+			r.statusMessage = RebuildStatusInternalError
 
 			return err
 		}
 
 		err = r.exe()
 		if err != nil {
-			r.statusMessage = "INTERNAL ERROR"
-			r.event()
+			r.statusMessage = RebuildStatusInternalError
 
 			return err
 		}
@@ -125,8 +125,7 @@ func (r *GwRebuild) Rebuild() error {
 		err = r.exe()
 
 		if err != nil {
-			r.statusMessage = "INTERNAL ERROR"
-			r.event()
+			r.statusMessage = RebuildStatusInternalError
 
 			return err
 		}
@@ -142,8 +141,7 @@ func (r *GwRebuild) Rebuild() error {
 		r.exe()
 
 		if err != nil {
-			r.statusMessage = "INTERNAL ERROR"
-			r.event()
+			r.statusMessage = RebuildStatusInternalError
 
 			return err
 		}
@@ -152,8 +150,6 @@ func (r *GwRebuild) Rebuild() error {
 		r.rebuildStatus()
 
 	}
-	r.event()
-	r.clean()
 
 	return nil
 }
@@ -179,7 +175,7 @@ func setupDirs(workDir string) error {
 	return nil
 }
 
-func (r *GwRebuild) clean() error {
+func (r *GwRebuild) Clean() error {
 	err := os.RemoveAll(r.workDir)
 	return err
 }
@@ -285,8 +281,8 @@ func (r *GwRebuild) rebuildStatus() {
 	r.statusMessage = parseStatus(string(b))
 
 	if r.FileType == "zip" {
-		if r.statusMessage == "CLEAN" || r.statusMessage == "UNPROCESSABLE" {
-			r.statusMessage = "CLEANED"
+		if r.statusMessage == RebuildStatusClean || r.statusMessage == RebuildStatusUnprocessable {
+			r.statusMessage = RebuildStatusCleaned
 		}
 	}
 
@@ -361,14 +357,14 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 	return err
 }
 
-func (r *GwRebuild) event() error {
+func (r *GwRebuild) Event() error {
 	var ev events.EventManager
 	ev = events.EventManager{FileId: r.FileName}
 	ev.NewDocument("00000000-0000-0000-0000-000000000000")
 
-	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
+	if r.statusMessage != RebuildStatusInternalError && r.statusMessage != RebuildStatusExpired {
 
-		fileType := parseContnetType(http.DetectContentType(r.File[:511]))
+		fileType := getContentType(r.File)
 
 		ev.FileTypeDetected(fileType)
 		gwoutcome := gwoutcome(r.statusMessage)
@@ -388,14 +384,22 @@ func (r *GwRebuild) event() error {
 
 func gwoutcome(status string) string {
 	switch status {
-	case "CLEAN":
+	case RebuildStatusClean:
 		return "unmodified"
-	case "CLEANED":
+	case RebuildStatusCleaned:
 		return "replace"
-	case "UNPROCESSABLE":
+	case RebuildStatusUnprocessable:
 		return "unmodified"
-	case "SDK EXPIRED", "INTERNAL ERROR":
+	case RebuildStatusExpired, RebuildStatusInternalError:
 		return "failed"
 	}
 	return ""
+}
+
+func getContentType(b []byte) string {
+	if len(b) < 512 {
+		return ""
+	}
+	c := http.DetectContentType(b[:511])
+	return parseContnetType(c)
 }

@@ -39,7 +39,7 @@ func parseLogExpir(s string) string {
 	offset := len(s) - len(str)
 	s = s[offset:]
 	if s == str {
-		return "SDK EXPIRED"
+		return RebuildStatusExpired
 	}
 	return ""
 }
@@ -73,6 +73,6 @@ func parseStatus(b string) string {
 
 	}
 
-	return "UNPROCESSABLE"
+	return RebuildStatusUnprocessable
 
 }
