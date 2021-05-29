@@ -225,29 +225,39 @@ func TestGwCliExec(t *testing.T) {
 
 }
 
-/*
 func TestRebuild(t *testing.T) {
 
-	//test with multiple file , conormed and managed
-	var format = []string{
-		".pdf",
-		".pnv",
-		".doc",
-		".rar",
-		"altred.pdf",
+	files := []struct {
+		Name   string
+		Status string
+	}{
+		{"sample.pdf", "CLEANED"},
+		{"sample.jpg", "CLEANED"},
+		{"sample.doc", "CLEAN"},
+		{"unprocessable.jpg", "UNPROCESSABLE"},
+		{"nested.zip", "CLEANED"},
 	}
 
-	for _, v := range format {
-		rb := newRebuild(v)
-		err := rb.Rebuild()
+	path := filepath.Join(mainProjectPath, depDirTemp)
+	for i, _ := range files {
+		f, err := ioutil.ReadFile(filepath.Join(path, files[i].Name))
 		if err != nil {
-			t.Errorf("")
+			t.Error(err)
 		}
 
-	}
-}
+		randPath := RandStringRunes(16)
+		fd := New(f, files[i].Name, "*", randPath)
+		err = fd.Rebuild()
+		if err != nil {
+			t.Error(err)
+		}
+		if fd.PrintStatus() != files[i].Status {
+			t.Errorf("errors %s expected %s got %s", files[i].Name, files[i].Status, fd.PrintStatus())
 
-*/
+		}
+	}
+
+}
 
 func TestCliExitStatus(t *testing.T) {
 	rcUnknown := 5

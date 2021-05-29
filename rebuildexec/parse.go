@@ -44,19 +44,35 @@ func parseLogExpir(s string) string {
 	return ""
 }
 
-func parseVersion(b string) string {
-	sl := strings.Split(string(b), "\n")
-
-	if len(sl) > 0 {
-		return sl[0]
-	}
-	return ""
-}
-
 func parseContnetType(s string) string {
 	sl := strings.Split(s, "/")
 	if len(sl) > 1 {
 		return sl[1]
 	}
 	return s
+}
+
+func parseStatus(b string) string {
+
+	if len(b) > 200 {
+
+		b = (b[(len(b) - 200):])
+
+	}
+
+	sl := strings.Split(string(b), "\n")
+	for _, s := range sl {
+		statusdesc := parseCode(s)
+		if statusdesc != "" {
+			return statusdesc
+		}
+		statusdesc = parseLogExpir(s)
+		if statusdesc != "" {
+			return statusdesc
+		}
+
+	}
+
+	return "UNPROCESSABLE"
+
 }
