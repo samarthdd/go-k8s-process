@@ -239,7 +239,7 @@ func TestRebuild(t *testing.T) {
 	}
 
 	path := filepath.Join(mainProjectPath, depDirTemp)
-	for i, _ := range files {
+	for i := range files {
 		f, err := ioutil.ReadFile(filepath.Join(path, files[i].Name))
 		if err != nil {
 			t.Error(err)

@@ -4,14 +4,6 @@ import (
 	"testing"
 )
 
-func TestPrintversion(t *testing.T) {
-	//err := PrintVersion()
-	//	if err != nil {
-	//		t.Errorf("error printing version : %s", err)
-	//	}
-
-}
-
 func TestParseVersion(t *testing.T) {
 	validVersionOutput := `1.221
 SUCCESS
