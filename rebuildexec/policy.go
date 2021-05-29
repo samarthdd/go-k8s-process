@@ -49,7 +49,7 @@ type XmlConfig struct {
 */
 
 type Pdfcontentmanagement struct {
-	Watermark          json.Number `json:"-" xml:"watermark"`
+	Watermark          json.Number `json:"-" xml:"watermark,omitempty"`
 	Metadata           json.Number `json:"Metadata" xml:"metadata"`
 	InternalHyperlinks json.Number `json:"InternalHyperlinks" xml:"internal_hyperlinks"`
 	ExternalHyperlinks json.Number `json:"ExternalHyperlinks" xml:"external_hyperlinks"`
@@ -146,6 +146,10 @@ func cmpJsontoXml(b []byte) []byte {
 		ExcelContentManagement:      cmp.ExcelContentManagement,
 	}
 	cmpXml.PdfContentManagement.cmpNumToStr()
+	cmpXml.WordContentManagement.cmpNumToStr()
+	cmpXml.ExcelContentManagement.cmpNumToStr()
+	cmpXml.PowerPointContentManagement.cmpNumToStr()
+
 	xmlB, err := xml.MarshalIndent(cmpXml, "", "   ")
 	if err != nil {
 		log.Fatal(err)

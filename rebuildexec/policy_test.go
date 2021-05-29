@@ -9,20 +9,20 @@ import (
 const (
 	cmpJsonSample = `{
         "PdfContentManagement": {
-            "Metadata": 0,
-            "InternalHyperlinks": 0,
-            "ExternalHyperlinks": 0,
-            "EmbeddedFiles": 0,
-            "EmbeddedImages": 0,
-            "Javascript": 0,
-            "Acroform": 0,
-            "ActionsAll": 0
+            "Metadata": 1,
+            "InternalHyperlinks": 1,
+            "ExternalHyperlinks": 1,
+            "EmbeddedFiles": 1,
+            "EmbeddedImages": 1,
+            "Javascript": 1,
+            "Acroform": 1,
+            "ActionsAll": 1
         },
         "ExcelContentManagement": {
-            "Metadata": 0,
-            "InternalHyperlinks": 0,
-            "ExternalHyperlinks": 0,
-            "EmbeddedFiles": 0,
+            "Metadata": 2,
+            "InternalHyperlinks": 2,
+            "ExternalHyperlinks": 2,
+            "EmbeddedFiles": 1,
             "EmbeddedImages": 0,
             "DynamicDataExchange": 0,
             "Macros": 0,
