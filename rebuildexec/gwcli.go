@@ -60,12 +60,9 @@ type GwRebuild struct {
 	Metadata    []byte
 }
 
-func New(file []byte, fileName, fileType, randDir string) GwRebuild {
+func NewRebuild(file []byte, fileName, fileType, randDir, processDir string) GwRebuild {
 
-	fullpath := filepath.Join(INPUT, randDir)
-	if getContentType(file) == "zip" {
-		fileType = "zip"
-	}
+	fullpath := filepath.Join(processDir, randDir)
 
 	gwRebuild := GwRebuild{
 		File:     file,
@@ -76,8 +73,7 @@ func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 
 	return gwRebuild
 }
-
-func (r *GwRebuild) Rebuild() error {
+func (r *GwRebuild) RebuildZip() error {
 	defer r.Event()
 
 	err := setupDirs(r.workDir)
@@ -96,41 +92,28 @@ func (r *GwRebuild) Rebuild() error {
 		return err
 	}
 
-	if r.FileType == "zip" {
-		zipProc := zipProcess{
-			workdir:   filepath.Dir(path),
-			zipEntity: nil,
-			ext:       "",
-		}
-		err = r.extractZip(&zipProc)
-		if err != nil {
-			r.statusMessage = RebuildStatusInternalError
+	zipProc := zipProcess{
+		workdir:   filepath.Dir(path),
+		zipEntity: nil,
+		ext:       "",
+	}
+	err = r.extractZip(&zipProc)
+	if err != nil {
+		r.statusMessage = RebuildStatusInternalError
 
-			return err
-		}
-
-		err = r.exe()
-		if err != nil {
-			r.statusMessage = RebuildStatusInternalError
-
-			return err
-		}
-
-		r.zipAll(zipProc, "")
-		r.zipAll(zipProc, ".xml")
-		r.zipAll(zipProc, ".log")
-
-	} else {
-
-		err = r.exe()
-
-		if err != nil {
-			r.statusMessage = RebuildStatusInternalError
-
-			return err
-		}
+		return err
 	}
 
+	err = r.exe()
+	if err != nil {
+		r.statusMessage = RebuildStatusInternalError
+
+		return err
+	}
+
+	r.zipAll(zipProc, "")
+	r.zipAll(zipProc, ".xml")
+	r.zipAll(zipProc, ".log")
 	r.fileProcessed()
 
 	if r.LogFile != nil {
@@ -151,6 +134,56 @@ func (r *GwRebuild) Rebuild() error {
 
 	}
 
+	return nil
+
+}
+
+func (r *GwRebuild) Rebuild() error {
+	defer r.Event()
+
+	err := setupDirs(r.workDir)
+	if err != nil {
+		r.statusMessage = RebuildStatusInternalError
+
+		return err
+	}
+
+	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
+
+	err = ioutil.WriteFile(path, r.File, 0666)
+	if err != nil {
+		r.statusMessage = RebuildStatusInternalError
+
+		return err
+	}
+	err = r.exe()
+
+	if err != nil {
+		r.statusMessage = RebuildStatusInternalError
+
+		return err
+	}
+
+	r.fileProcessed()
+
+	r.rebuildStatus()
+
+	return nil
+}
+
+func (r *GwRebuild) CheckIfExpired() error {
+	defer r.Event()
+	r.FileType = "pdf"
+	err := r.exe()
+
+	if err != nil {
+		r.statusMessage = RebuildStatusInternalError
+
+		return err
+	}
+	r.fileProcessed()
+
+	r.rebuildStatus()
 	return nil
 }
 
@@ -364,7 +397,7 @@ func (r *GwRebuild) Event() error {
 
 	if r.statusMessage != RebuildStatusInternalError && r.statusMessage != RebuildStatusExpired {
 
-		fileType := getContentType(r.File)
+		fileType := GetContentType(r.File)
 
 		ev.FileTypeDetected(fileType)
 		gwoutcome := gwoutcome(r.statusMessage)
@@ -396,7 +429,7 @@ func gwoutcome(status string) string {
 	return ""
 }
 
-func getContentType(b []byte) string {
+func GetContentType(b []byte) string {
 	if len(b) < 512 {
 		return ""
 	}

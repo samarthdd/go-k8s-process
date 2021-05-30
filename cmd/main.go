@@ -241,18 +241,56 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	randPath := rebuildexec.RandStringRunes(16)
 	fileTtype := "*" // wild card
-	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
-	err := fd.Rebuild()
-	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
-	if err != nil {
-		if JeagerStatus == true {
-
-			span.LogKV("Errror", err)
-		}
-		zlog.Error().Err(err).Msg("error failed to rebuild file")
-
-		return
+	if rebuildexec.GetContentType(f) == "zip" {
+		fileTtype = "zip"
 	}
+
+	processDir := "/tmp/glrebuild"
+
+	fd := rebuildexec.NewRebuild(f, fileid, fileTtype, randPath, processDir)
+	if fileTtype == "zip" {
+		err := fd.RebuildZip()
+		if err != nil {
+			if JeagerStatus == true {
+
+				span.LogKV("Errror", err)
+			}
+			d["rebuild-processing-status"] = fd.PrintStatus()
+
+			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
+
+			return
+		}
+	} else {
+		err := fd.Rebuild()
+		if err != nil {
+			if JeagerStatus == true {
+
+				span.LogKV("Errror", err)
+			}
+			d["rebuild-processing-status"] = fd.PrintStatus()
+
+			zlog.Error().Err(err).Msg("error failed to rebuild file")
+
+			return
+		}
+
+	}
+	if fd.PrintStatus() == "UNPROCESSABLE" && fd.LogFile == nil {
+		err := fd.CheckIfExpired()
+		if err != nil {
+			if JeagerStatus == true {
+
+				span.LogKV("Errror", err)
+			}
+			d["rebuild-processing-status"] = fd.PrintStatus()
+
+			zlog.Error().Err(err).Msg("error failed to rebuild file")
+
+			return
+		}
+	}
+	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 
 	d["rebuild-processing-status"] = fd.PrintStatus()
 	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
@@ -326,7 +364,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	}
 
-	err = fd.Clean()
+	err := fd.Clean()
 	if err != nil {
 		zlog.Error().Err(err).Msg("error rebuildexec Clean function : %s")
 

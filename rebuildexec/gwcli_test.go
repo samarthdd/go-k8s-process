@@ -122,24 +122,6 @@ func setupDep(mainDir string) error {
 	return nil
 }
 
-func openSampleFile(filepath string) []byte {
-	b, err := ioutil.ReadFile(sampleFilePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return b
-}
-
-func newRebuild(filepath string) GwRebuild {
-
-	randPath := RandStringRunes(16)
-	f := openSampleFile(filepath)
-
-	rb := New(f, sampleFileName, "*", randPath)
-	return rb
-}
-
 func moveFile(oldpath, newpath string) error {
 	var out bytes.Buffer
 
@@ -227,6 +209,8 @@ func TestGwCliExec(t *testing.T) {
 
 func TestRebuild(t *testing.T) {
 
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
+
 	files := []struct {
 		Name   string
 		Status string
@@ -235,7 +219,7 @@ func TestRebuild(t *testing.T) {
 		{"sample.jpg", "CLEANED"},
 		{"sample.doc", "CLEAN"},
 		{"unprocessable.jpg", "UNPROCESSABLE"},
-		{"nested.zip", "CLEANED"},
+		{"nested.zip", "UNPROCESSABLE"},
 	}
 
 	path := filepath.Join(mainProjectPath, depDirTemp)
@@ -246,7 +230,7 @@ func TestRebuild(t *testing.T) {
 		}
 
 		randPath := RandStringRunes(16)
-		fd := New(f, files[i].Name, "*", randPath)
+		fd := NewRebuild(f, files[i].Name, "*", randPath, processDir)
 		err = fd.Rebuild()
 		if err != nil {
 			t.Error(err)
@@ -255,6 +239,26 @@ func TestRebuild(t *testing.T) {
 			t.Errorf("errors %s expected %s got %s", files[i].Name, files[i].Status, fd.PrintStatus())
 
 		}
+		if fd.RebuiltFile == nil && files[i].Status != "UNPROCESSABLE" {
+			t.Error("rebuilt file not found")
+
+		}
+		if fd.ReportFile == nil {
+			t.Error("report file not found")
+		}
+		if fd.LogFile == nil {
+			t.Error("Log  file not found")
+		}
+		if fd.GwLogFile == nil {
+			t.Error("gw Log file not found")
+
+		}
+		if fd.Metadata == nil {
+			t.Error("metadata  file not found")
+
+		}
+		fd.Clean()
+
 	}
 
 }
@@ -284,10 +288,11 @@ func TestCliExitStatus(t *testing.T) {
 }
 
 func TestRebuildFile(t *testing.T) {
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
 
 	f, _ := ioutil.ReadFile(filepath.Join(mainProjectPath, depDirTemp, "sample.pdf"))
 	randPath := RandStringRunes(16)
-	fd := New(f, "samplee.pdf", "*", randPath)
+	fd := NewRebuild(f, "samplee.pdf", "*", randPath, processDir)
 	err := fd.Rebuild()
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 
@@ -323,20 +328,27 @@ func changeIniconfigToValidPath(path string) {
 		log.Printf("Fail to save ini file : %s", err)
 
 	}
+
 }
 
 func TestRebuildZip(t *testing.T) {
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
 
 	zipPath := filepath.Join(mainProjectPath, depDirTemp, "nested.zip")
 
 	f, _ := ioutil.ReadFile(zipPath)
 	randPath := RandStringRunes(16)
-	fd := New(f, "nested.zip", "zip", randPath)
+
+	fd := NewRebuild(f, "nested.zip", "zip", randPath, processDir)
 	err := fd.Rebuild()
-	log.Printf("\033[34m rebuild status a is  : %s\n", fd.PrintStatus())
 
 	if err != nil {
 		t.Error(err)
 
 	}
+	if fd.PrintStatus() != "CLEANED" {
+		t.Errorf("errors %s expected %s got %s", "RebuildZip", "CLEANED", fd.PrintStatus())
+
+	}
+	fd.Clean()
 }
