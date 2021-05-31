@@ -231,10 +231,16 @@ func TestRebuild(t *testing.T) {
 
 		randPath := RandStringRunes(16)
 		fd := NewRebuild(f, files[i].Name, "*", randPath, processDir)
-		err = fd.Rebuild()
+		err = fd.RebuildSetup()
 		if err != nil {
 			t.Error(err)
 		}
+		err = fd.Execute()
+		if err != nil {
+			t.Error(err)
+		}
+		fd.Yield()
+
 		if fd.PrintStatus() != files[i].Status {
 			t.Errorf("errors %s expected %s got %s", files[i].Name, files[i].Status, fd.PrintStatus())
 
@@ -287,17 +293,25 @@ func TestCliExitStatus(t *testing.T) {
 	}
 }
 
-func TestRebuildFile(t *testing.T) {
+func TestRebuildFileInternalError(t *testing.T) {
+	os.Setenv("GWCLI", "NONVALIDPATH")
 	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
 
 	f, _ := ioutil.ReadFile(filepath.Join(mainProjectPath, depDirTemp, "sample.pdf"))
 	randPath := RandStringRunes(16)
 	fd := NewRebuild(f, "samplee.pdf", "*", randPath, processDir)
-	err := fd.Rebuild()
-	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
+	err := fd.RebuildSetup()
 
 	if err != nil {
 		t.Error(err)
+
+	}
+	err = fd.Execute()
+	if err == nil {
+		t.Errorf("expected CLI error with exit code 1 ")
+	}
+	if fd.PrintStatus() != RebuildStatusInternalError {
+		t.Errorf("error expected %s got %s ", RebuildStatusInternalError, fd.PrintStatus())
 
 	}
 
@@ -340,12 +354,19 @@ func TestRebuildZip(t *testing.T) {
 	randPath := RandStringRunes(16)
 
 	fd := NewRebuild(f, "nested.zip", "zip", randPath, processDir)
-	err := fd.RebuildZip()
+	err := fd.RebuildZipSetup()
 
 	if err != nil {
 		t.Error(err)
 
 	}
+
+	err = fd.Execute()
+	if err != nil {
+		t.Error(err)
+	}
+	fd.YieldZip()
+
 	if fd.PrintStatus() != "CLEANED" {
 		t.Errorf("errors %s expected %s got %s", "RebuildZip", "CLEANED", fd.PrintStatus())
 

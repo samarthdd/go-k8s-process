@@ -249,7 +249,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	fd := rebuildexec.NewRebuild(f, fileid, fileTtype, randPath, processDir)
 	if fileTtype == "zip" {
-		err := fd.RebuildZip()
+		err := fd.RebuildZipSetup()
 		if err != nil {
 			if JeagerStatus == true {
 
@@ -261,8 +261,22 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			return
 		}
+		err = fd.Execute()
+		if err != nil {
+			if JeagerStatus == true {
+
+				span.LogKV("Errror", err)
+			}
+			d["rebuild-processing-status"] = fd.PrintStatus()
+
+			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
+
+			return
+		}
+		fd.YieldZip()
+
 	} else {
-		err := fd.Rebuild()
+		err := fd.RebuildSetup()
 		if err != nil {
 			if JeagerStatus == true {
 
@@ -274,6 +288,19 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			return
 		}
+		err = fd.Execute()
+		if err != nil {
+			if JeagerStatus == true {
+
+				span.LogKV("Errror", err)
+			}
+			d["rebuild-processing-status"] = fd.PrintStatus()
+
+			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
+
+			return
+		}
+		fd.Yield()
 
 	}
 	if fd.PrintStatus() == "UNPROCESSABLE" && fd.LogFile == nil {
@@ -286,6 +313,18 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 			d["rebuild-processing-status"] = fd.PrintStatus()
 
 			zlog.Error().Err(err).Msg("error failed to rebuild file")
+
+			return
+		}
+		err = fd.Execute()
+		if err != nil {
+			if JeagerStatus == true {
+
+				span.LogKV("Errror", err)
+			}
+			d["rebuild-processing-status"] = fd.PrintStatus()
+
+			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
 
 			return
 		}
@@ -342,7 +381,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	if logFile == nil {
 
-		zlog.Error().Msg("error rebuildexec GwFileLog function")
+		zlog.Error().Msg("error rebuildexec FileLog function")
 
 	} else {
 		fileExt := ".log"
@@ -357,7 +396,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	metaDataFile := fd.Metadata
 	if metaDataFile == nil {
 
-		zlog.Error().Msg("error rebuildexec GwFileLog function")
+		zlog.Error().Msg("error rebuildexec metadata function")
 
 	} else {
 		minioUploadProcess(metaDataFile, fileid, ".metadata.json", "metadata-presigned-url", d)

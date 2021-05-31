@@ -22,7 +22,6 @@ const (
 	APP           = "glasswallCLI"
 	CONFIGINI     = "config.ini"
 	XMLCONFIG     = "config.xml"
-	INPUT         = "/tmp/glrebuild"
 	MANAGED       = "Managed"
 	NONCONFORMING = "NonConforming"
 	INPUTKEY      = "inputLocation"
@@ -43,7 +42,6 @@ const (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-	os.MkdirAll(INPUT, 0777)
 }
 
 type GwRebuild struct {
@@ -53,12 +51,13 @@ type GwRebuild struct {
 	workDir  string
 
 	statusMessage string
-
-	RebuiltFile []byte
-	ReportFile  []byte
-	LogFile     []byte
-	GwLogFile   []byte
-	Metadata    []byte
+	args          string
+	event         events.EventManager
+	RebuiltFile   []byte
+	ReportFile    []byte
+	LogFile       []byte
+	GwLogFile     []byte
+	Metadata      []byte
 }
 
 func NewRebuild(file []byte, fileName, fileType, randDir, processDir string) GwRebuild {
@@ -74,8 +73,8 @@ func NewRebuild(file []byte, fileName, fileType, randDir, processDir string) GwR
 
 	return gwRebuild
 }
-func (r *GwRebuild) RebuildZip() error {
-	defer r.Event()
+
+func (r *GwRebuild) RebuildZipSetup() error {
 
 	err := setupDirs(r.workDir)
 	if err != nil {
@@ -84,15 +83,14 @@ func (r *GwRebuild) RebuildZip() error {
 		return err
 	}
 
-	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
-
-	err = ioutil.WriteFile(path, r.File, 0666)
+	err = r.copyTargetFile()
 	if err != nil {
 		r.statusMessage = RebuildStatusInternalError
 
 		return err
 	}
 
+	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
 	zipProc := zipProcess{
 		workdir:   filepath.Dir(path),
 		zipEntity: nil,
@@ -115,15 +113,31 @@ func (r *GwRebuild) RebuildZip() error {
 	r.zipAll(zipProc, "")
 	r.zipAll(zipProc, ".xml")
 	r.zipAll(zipProc, ".log")
-	r.fileProcessed()
+	r.loadfFilesAfterProcess()
 
 	r.rebuildStatus()
 	return nil
 
 }
 
-func (r *GwRebuild) Rebuild() error {
+func (r *GwRebuild) YieldZip() {
 	defer r.Event()
+
+	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
+	zipProc := zipProcess{
+		workdir:   filepath.Dir(path),
+		zipEntity: nil,
+		ext:       "",
+	}
+	r.zipAll(zipProc, "")
+	r.zipAll(zipProc, ".xml")
+	r.zipAll(zipProc, ".log")
+	r.loadfFilesAfterProcess()
+
+	r.rebuildStatus()
+}
+
+func (r *GwRebuild) RebuildSetup() error {
 
 	err := setupDirs(r.workDir)
 	if err != nil {
@@ -132,9 +146,7 @@ func (r *GwRebuild) Rebuild() error {
 		return err
 	}
 
-	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
-
-	err = ioutil.WriteFile(path, r.File, 0666)
+	err = r.copyTargetFile()
 	if err != nil {
 		r.statusMessage = RebuildStatusInternalError
 
@@ -148,11 +160,23 @@ func (r *GwRebuild) Rebuild() error {
 		return err
 	}
 
-	r.fileProcessed()
+	return nil
+}
+
+func (r *GwRebuild) Yield() {
+	defer r.Event()
+
+	r.loadfFilesAfterProcess()
 
 	r.rebuildStatus()
 
-	return nil
+}
+
+func (r *GwRebuild) copyTargetFile() error {
+	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
+
+	err := ioutil.WriteFile(path, r.File, 0666)
+	return err
 }
 
 func (r *GwRebuild) CheckIfExpired() error {
@@ -165,30 +189,9 @@ func (r *GwRebuild) CheckIfExpired() error {
 
 		return err
 	}
-	r.fileProcessed()
+	r.loadfFilesAfterProcess()
 
 	r.rebuildStatus()
-	return nil
-}
-
-func setupDirs(workDir string) error {
-
-	err := os.MkdirAll(workDir, 0777)
-	if err != nil {
-		return err
-	}
-
-	inputRebuildpath := filepath.Join(workDir, REBUILDINPUT)
-	err = os.MkdirAll(inputRebuildpath, 0777)
-	if err != nil {
-		return err
-	}
-	outputRebuildpath := filepath.Join(workDir, REBUILDOUTPUT)
-
-	err = os.MkdirAll(outputRebuildpath, 0777)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -197,7 +200,7 @@ func (r *GwRebuild) Clean() error {
 	return err
 }
 
-func (r *GwRebuild) fileProcessed() {
+func (r *GwRebuild) loadfFilesAfterProcess() {
 	var err error
 	r.RebuiltFile, err = r.retrieveGwFile("")
 	if err != nil {
@@ -270,14 +273,20 @@ func (r *GwRebuild) exe() error {
 
 	err = cfg.SaveTo(randConfigini)
 	if err != nil {
-		return fmt.Errorf("fail to save ini file : %s", err)
+		return fmt.Errorf("failed to save ini file : %s", err)
 
 	}
 
-	args := fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, randConfigini, randXmlconfig)
+	r.args = fmt.Sprintf("%s -config=%s -xmlconfig=%s", app, randConfigini, randXmlconfig)
+	return nil
 
-	b, err := gwCliExec(args)
+}
+
+func (r *GwRebuild) Execute() error {
+	b, err := gwCliExec(r.args)
 	if err != nil {
+		r.statusMessage = RebuildStatusInternalError
+
 		return err
 	}
 
@@ -288,11 +297,6 @@ func (r *GwRebuild) exe() error {
 
 func (r *GwRebuild) rebuildStatus() {
 
-	//enum rebuild_request_body_return {REBUILD_UNPROCESSED=0, REBUILD_REBUILT=1, REBUILD_FAILED=2, REBUILD_ERROR=9};
-	/* REBUILD_UNPROCESSED - to continue to unchanged content */
-	/* REBUILD_REBUILT - to continue to rebuilt content */
-	/* REBUILD_FAILED - to report error and use supplied error report */
-	/* REBUILD_ERROR - to report  processing error */
 	b := r.LogFile
 
 	r.statusMessage = parseStatus(string(b))
@@ -305,7 +309,7 @@ func (r *GwRebuild) rebuildStatus() {
 
 }
 
-func (r GwRebuild) PrintStatus() string {
+func (r *GwRebuild) PrintStatus() string {
 
 	s := r.statusMessage
 	return s
@@ -398,11 +402,31 @@ func (r *GwRebuild) Event() error {
 	return nil
 }
 
+func setupDirs(workDir string) error {
+
+	err := os.MkdirAll(workDir, 0777)
+	if err != nil {
+		return err
+	}
+
+	inputRebuildpath := filepath.Join(workDir, REBUILDINPUT)
+	err = os.MkdirAll(inputRebuildpath, 0777)
+	if err != nil {
+		return err
+	}
+	outputRebuildpath := filepath.Join(workDir, REBUILDOUTPUT)
+
+	err = os.MkdirAll(outputRebuildpath, 0777)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func gwoutcome(status string) string {
 	switch status {
-	case RebuildStatusClean:
-		return "unmodified"
-	case RebuildStatusCleaned:
+
+	case RebuildStatusCleaned, RebuildStatusClean:
 		return "replace"
 	case RebuildStatusUnprocessable:
 		return "unmodified"
