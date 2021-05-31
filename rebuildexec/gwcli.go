@@ -140,7 +140,7 @@ func (r *GwRebuild) Rebuild() error {
 		err = r.extractZip(&zipProc)
 		if err != nil {
 			r.statusMessage = "INTERNAL ERROR"
-		r.event()
+			r.event()
 
 			return err
 		}
@@ -148,7 +148,7 @@ func (r *GwRebuild) Rebuild() error {
 		err = r.exe()
 		if err != nil {
 			r.statusMessage = "INTERNAL ERROR"
-		r.event()
+			r.event()
 
 			return err
 		}
@@ -163,7 +163,7 @@ func (r *GwRebuild) Rebuild() error {
 
 		if err != nil {
 			r.statusMessage = "INTERNAL ERROR"
-		r.event()
+			r.event()
 
 			return err
 		}
@@ -539,7 +539,7 @@ func (r *GwRebuild) event() error {
 		fileType := parseContnetType(http.DetectContentType(r.File[:511]))
 
 		ev.FileTypeDetected(fileType)
-		gwoutcome := gwoutcome(r.statusMessage)
+		gwoutcome := Gwoutcome(r.statusMessage)
 
 		ev.RebuildStarted()
 		ev.RebuildCompleted(gwoutcome)
@@ -554,11 +554,9 @@ func (r *GwRebuild) event() error {
 	return nil
 }
 
-func gwoutcome(status string) string {
+func Gwoutcome(status string) string {
 	switch status {
-	case "CLEAN":
-		return "unmodified"
-	case "CLEANED":
+	case "CLEAN", "CLEANED":
 		return "replace"
 	case "UNPROCESSABLE":
 		return "unmodified"
