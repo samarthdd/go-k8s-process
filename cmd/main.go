@@ -251,13 +251,16 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 		}
 		zlog.Error().Err(err).Msg("error failed to rebuild file")
 
-		return
 	}
 
 	status := fd.PrintStatus()
 	d["rebuild-processing-status"] = status
 	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
 	d["file-outcome"] = rebuildexec.Gwoutcome(status)
+
+	if status == "INTERNAL ERROR" {
+		return
+	}
 
 	zlog.Info().Msg("file rebuilt process  successfully ")
 
