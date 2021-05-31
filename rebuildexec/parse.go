@@ -44,14 +44,6 @@ func parseLogExpir(s string) string {
 	return ""
 }
 
-func parseContnetType(s string) string {
-	sl := strings.Split(s, "/")
-	if len(sl) > 1 {
-		return sl[1]
-	}
-	return s
-}
-
 func parseStatus(b string) string {
 
 	if len(b) > 200 {

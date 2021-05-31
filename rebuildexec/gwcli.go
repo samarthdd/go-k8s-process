@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-ini/ini"
@@ -116,24 +117,7 @@ func (r *GwRebuild) RebuildZip() error {
 	r.zipAll(zipProc, ".log")
 	r.fileProcessed()
 
-	if r.LogFile != nil {
-		r.rebuildStatus()
-
-	} else {
-		r.FileType = "pdf"
-		r.exe()
-
-		if err != nil {
-			r.statusMessage = RebuildStatusInternalError
-
-			return err
-		}
-		r.fileProcessed()
-
-		r.rebuildStatus()
-
-	}
-
+	r.rebuildStatus()
 	return nil
 
 }
@@ -260,7 +244,7 @@ func (r *GwRebuild) exe() error {
 
 	cfg, err := ini.Load(randConfigini)
 	if err != nil {
-		return fmt.Errorf("Fail to read ini file  %s", err)
+		return fmt.Errorf("fail to read ini file  %s", err)
 	}
 
 	sec := cfg.Section(SECTION)
@@ -286,7 +270,7 @@ func (r *GwRebuild) exe() error {
 
 	err = cfg.SaveTo(randConfigini)
 	if err != nil {
-		return fmt.Errorf("Fail to save ini file : %s", err)
+		return fmt.Errorf("fail to save ini file : %s", err)
 
 	}
 
@@ -366,7 +350,7 @@ func (r *GwRebuild) extractZip(z *zipProcess) error {
 		return err
 	}
 
-	err = os.Remove(filepath.Join(z.workdir, r.FileName))
+	os.Remove(filepath.Join(z.workdir, r.FileName))
 
 	return nil
 }
@@ -391,8 +375,7 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 }
 
 func (r *GwRebuild) Event() error {
-	var ev events.EventManager
-	ev = events.EventManager{FileId: r.FileName}
+	ev := events.EventManager{FileId: r.FileName}
 	ev.NewDocument("00000000-0000-0000-0000-000000000000")
 
 	if r.statusMessage != RebuildStatusInternalError && r.statusMessage != RebuildStatusExpired {
@@ -435,4 +418,12 @@ func GetContentType(b []byte) string {
 	}
 	c := http.DetectContentType(b[:511])
 	return parseContnetType(c)
+}
+
+func parseContnetType(s string) string {
+	sl := strings.Split(s, "/")
+	if len(sl) > 1 {
+		return sl[1]
+	}
+	return s
 }

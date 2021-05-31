@@ -87,7 +87,7 @@ func setupDep(mainDir string) error {
 	cmd := exec.Command("cp", "-r", absouluteDepDir, filepath.Join(mainProjectPath, "tmp"))
 	cmd.Stdout = &out
 	err := cmd.Run()
-	log.Println(string(out.Bytes()))
+	log.Println(out.String())
 	if err != nil {
 		log.Println(err)
 
@@ -128,7 +128,7 @@ func moveFile(oldpath, newpath string) error {
 	cmd := exec.Command("cp", oldpath, newpath)
 	cmd.Stdout = &out
 	err := cmd.Run()
-	log.Println(string(out.Bytes()))
+	log.Println(out.String())
 	if err != nil {
 		log.Println(err)
 
@@ -215,11 +215,11 @@ func TestRebuild(t *testing.T) {
 		Name   string
 		Status string
 	}{
-		{"sample.pdf", "CLEANED"},
-		{"sample.jpg", "CLEANED"},
-		{"sample.doc", "CLEAN"},
-		{"unprocessable.jpg", "UNPROCESSABLE"},
-		{"nested.zip", "UNPROCESSABLE"},
+		{"sample.pdf", RebuildStatusCleaned},
+		{"sample.jpg", RebuildStatusCleaned},
+		{"sample.doc", RebuildStatusClean},
+		{"unprocessable.jpg", RebuildStatusUnprocessable},
+		{"nested.zip", RebuildStatusUnprocessable},
 	}
 
 	path := filepath.Join(mainProjectPath, depDirTemp)
@@ -239,7 +239,7 @@ func TestRebuild(t *testing.T) {
 			t.Errorf("errors %s expected %s got %s", files[i].Name, files[i].Status, fd.PrintStatus())
 
 		}
-		if fd.RebuiltFile == nil && files[i].Status != "UNPROCESSABLE" {
+		if fd.RebuiltFile == nil && files[i].Status != RebuildStatusUnprocessable {
 			t.Error("rebuilt file not found")
 
 		}
@@ -340,7 +340,7 @@ func TestRebuildZip(t *testing.T) {
 	randPath := RandStringRunes(16)
 
 	fd := NewRebuild(f, "nested.zip", "zip", randPath, processDir)
-	err := fd.Rebuild()
+	err := fd.RebuildZip()
 
 	if err != nil {
 		t.Error(err)

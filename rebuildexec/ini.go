@@ -9,7 +9,7 @@ import (
 func inikey(s *ini.Section, keyname, keyvalue string) error {
 	ok := s.HasKey(keyname)
 	if !ok {
-		return fmt.Errorf("Fail to find %s key", keyname)
+		return fmt.Errorf("fail to find %s key", keyname)
 	}
 	key := s.Key(keyname)
 	key.SetValue(keyvalue)
