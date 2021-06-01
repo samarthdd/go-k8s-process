@@ -63,13 +63,23 @@ type GwRebuild struct {
 func NewRebuild(file []byte, fileName, fileType, randDir, processDir string) GwRebuild {
 
 	fullpath := filepath.Join(processDir, randDir)
+	ftype := GetContentType(file)
+
+	if ftype == "zip" {
+		fileType = "zip"
+	}
 
 	gwRebuild := GwRebuild{
 		File:     file,
 		FileName: fileName,
 		FileType: fileType,
 		workDir:  fullpath,
+		event:    events.EventManager{FileId: fileName},
 	}
+
+	gwRebuild.event.NewDocument("00000000-0000-0000-0000-000000000000")
+
+	gwRebuild.event.FileTypeDetected(fileType)
 
 	return gwRebuild
 }
@@ -169,6 +179,7 @@ func (r *GwRebuild) Yield() {
 	r.loadfFilesAfterProcess()
 
 	r.rebuildStatus()
+	r.event.RebuildCompleted(gwoutcome(r.statusMessage))
 
 }
 
@@ -182,7 +193,9 @@ func (r *GwRebuild) copyTargetFile() error {
 func (r *GwRebuild) CheckIfExpired() error {
 	defer r.Event()
 	r.FileType = "pdf"
-	err := r.exe()
+	r.args = fmt.Sprintf("%s fileType=%s", r.args, r.FileType)
+
+	err := r.Execute()
 
 	if err != nil {
 		r.statusMessage = RebuildStatusInternalError
@@ -283,6 +296,8 @@ func (r *GwRebuild) exe() error {
 }
 
 func (r *GwRebuild) Execute() error {
+	r.event.RebuildStarted()
+
 	b, err := gwCliExec(r.args)
 	if err != nil {
 		r.statusMessage = RebuildStatusInternalError

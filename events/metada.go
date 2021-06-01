@@ -18,10 +18,6 @@ const (
 	NcfsCompletedEvent      = 0x90
 )
 
-const (
-	Ti = "2021-05-18T11:03:01.3365613Z"
-)
-
 type Metadata struct {
 	Events []Events `json:"Events"`
 }
