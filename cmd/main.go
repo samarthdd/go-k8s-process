@@ -272,12 +272,12 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	if generateReport == "true" {
 		report := fd.ReportFile
 		if report == nil {
-			zlog.Error().Msg("error rebuildexec fileRreport function")
+			zlog.Error().Msg("error report file  not found ")
 
 		} else {
-			fileExt := ".xml"
+			fileExt := "report.xml"
 			if fd.FileType == "zip" {
-				fileExt = "xml"
+				fileExt = "report.xml.zip"
 			}
 
 			minioUploadProcess(report, fileid, fileExt, "report-presigned-url", d)
@@ -288,20 +288,24 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	file := fd.RebuiltFile
 
 	if file == nil {
-		zlog.Error().Msg("error rebuildexec FileProcessed function")
+		zlog.Error().Msg("error rebuilt file not found")
 
 	} else {
-		minioUploadProcess(file, "rebuild-", fileid, "clean-presigned-url", d)
+		fileExt := "rebuilt"
+		if fd.FileType == "zip" {
+			fileExt = "rebuilt.zip"
+		}
+		minioUploadProcess(file, fileid, fileExt, "clean-presigned-url", d)
 
 	}
 
 	gwlogFile := fd.GwLogFile
 	if gwlogFile == nil {
 
-		zlog.Error().Msg("error rebuildexec GwFileLog function")
+		zlog.Error().Msg("error  GwFileLog file not found")
 
 	} else {
-		minioUploadProcess(gwlogFile, fileid, ".gw.log", "gwlog-presigned-url", d)
+		minioUploadProcess(gwlogFile, fileid, "gw.log", "gwlog-presigned-url", d)
 
 	}
 
@@ -309,12 +313,12 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	if logFile == nil {
 
-		zlog.Error().Msg("error rebuildexec GwFileLog function")
+		zlog.Error().Msg("error  log file not found ")
 
 	} else {
-		fileExt := ".log"
+		fileExt := "log"
 		if fd.FileType == "zip" {
-			fileExt = "log"
+			fileExt = "log.zip"
 		}
 
 		minioUploadProcess(logFile, fileid, fileExt, "log-presigned-url", d)
@@ -324,10 +328,10 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	metaDataFile := fd.Metadata
 	if metaDataFile == nil {
 
-		zlog.Error().Msg("error rebuildexec GwFileLog function")
+		zlog.Error().Msg("error  metadata function")
 
 	} else {
-		minioUploadProcess(metaDataFile, fileid, ".metadata.json", "metadata-presigned-url", d)
+		minioUploadProcess(metaDataFile, fileid, "metadata.json", "metadata-presigned-url", d)
 
 	}
 
@@ -395,7 +399,7 @@ func uploadMinio(file []byte, filename string) (string, error) {
 
 func minioUploadProcess(file []byte, baseName, extName, headername string, d amqp.Table) {
 
-	minioFileId := fmt.Sprintf("%s%s", baseName, extName)
+	minioFileId := fmt.Sprintf("%s/%s", baseName, extName)
 
 	urlr, err := uploadMinio(file, minioFileId)
 	if err != nil {
