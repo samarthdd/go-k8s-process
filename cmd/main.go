@@ -108,12 +108,6 @@ func main() {
 	go func() {
 		for d := range msgs {
 
-			if JeagerStatus == true {
-				tracer, closer := tracing.Init("process")
-				defer closer.Close()
-				opentracing.SetGlobalTracer(tracer)
-				ProcessTracer = tracer
-			}
 			zlog.Info().Msg("received message from queue ")
 
 			err := ProcessMessage(d.Headers)
@@ -145,6 +139,12 @@ func processend(err error) {
 
 func ProcessMessage(d amqp.Table) error {
 	if JeagerStatus == true {
+		if JeagerStatus == true {
+			tracer, closer := tracing.Init("process")
+			defer closer.Close()
+			opentracing.SetGlobalTracer(tracer)
+			ProcessTracer = tracer
+		}
 
 		if d["uber-trace-id"] != nil {
 
@@ -167,12 +167,13 @@ func ProcessMessage(d amqp.Table) error {
 				helloTo = d["file-id"].(string)
 
 			}
-			sp.SetTag("msg-procces", helloTo)
+			sp.SetTag("file-id", helloTo)
 			defer sp.Finish()
-			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
 			defer cancel()
 			// Update the context with the span for the subsequent reference.
 			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+			zlog.Info().Msg("file downloaded from minio successfully")
 
 		} else {
 			if d["file-id"] == nil {
@@ -182,7 +183,7 @@ func ProcessMessage(d amqp.Table) error {
 
 			}
 			span := ProcessTracer.StartSpan("go-k8s-process")
-			span.SetTag("msg-procces", helloTo)
+			span.SetTag("file-id", helloTo)
 			defer span.Finish()
 
 			ctx = opentracing.ContextWithSpan(context.Background(), span)
@@ -241,13 +242,14 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	randPath := rebuildexec.RandStringRunes(16)
 	fileTtype := "*" // wild card
-	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
-	err := fd.Rebuild()
+
+	fd, err := GWRF(f, fileid, fileTtype, randPath)
+
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 	if err != nil {
 		if JeagerStatus == true {
 
-			span.LogKV("Errror", err)
+			span.LogKV("error", err)
 		}
 		zlog.Error().Err(err).Msg("error failed to rebuild file")
 
@@ -364,6 +366,24 @@ func getFile(url string) ([]byte, error) {
 
 }
 
+// glasswall rbuild file
+func GWRF(f []byte, fileid string, fileTtype string, randPath string) (rebuildexec.GwRebuild, error) {
+	if JeagerStatus == true {
+		span, _ := opentracing.StartSpanFromContext(ctx, "rebuild")
+		defer span.Finish()
+		span.LogKV("file-id", fileid)
+	}
+	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
+	err := fd.Rebuild()
+	if err != nil {
+
+		zlog.Error().Err(err).Msg("error failed to rebuild file")
+
+	}
+	return fd, err
+
+}
+
 func uploadMinio(file []byte, filename string) (string, error) {
 	if minioClient == nil {
 		return "", fmt.Errorf("minio client not found")
@@ -415,7 +435,7 @@ func tracest(msg string) {
 	opentracing.SetGlobalTracer(tracer)
 	helloTo = msg
 	span := tracer.StartSpan("process file")
-	span.SetTag("msg-procces", helloTo)
+	span.SetTag("file-id", helloTo)
 	defer span.Finish()
 
 	ctx = opentracing.ContextWithSpan(context.Background(), span)
