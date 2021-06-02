@@ -259,7 +259,6 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
 
-			return
 		}
 		err = fd.Execute()
 		if err != nil {
@@ -271,7 +270,6 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
 
-			return
 		}
 		fd.YieldZip()
 
@@ -286,7 +284,6 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			zlog.Error().Err(err).Msg("error failed to rebuild file")
 
-			return
 		}
 		err = fd.Execute()
 		if err != nil {
@@ -298,7 +295,6 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
 
-			return
 		}
 		fd.Yield()
 
@@ -314,7 +310,6 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			zlog.Error().Err(err).Msg("error failed to rebuild file")
 
-			return
 		}
 		err = fd.Execute()
 		if err != nil {
@@ -326,8 +321,10 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
 
-			return
 		}
+	}
+	if fd.PrintStatus() == rebuildexec.RebuildStatusInternalError {
+		return
 	}
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 

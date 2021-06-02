@@ -85,6 +85,7 @@ func NewRebuild(file []byte, fileName, fileType, randDir, processDir string) GwR
 }
 
 func (r *GwRebuild) RebuildZipSetup() error {
+	r.event.RebuildStarted()
 
 	err := setupDirs(r.workDir)
 	if err != nil {
@@ -131,7 +132,6 @@ func (r *GwRebuild) RebuildZipSetup() error {
 }
 
 func (r *GwRebuild) YieldZip() {
-	defer r.Event()
 
 	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
 	zipProc := zipProcess{
@@ -148,6 +148,7 @@ func (r *GwRebuild) YieldZip() {
 }
 
 func (r *GwRebuild) RebuildSetup() error {
+	r.event.RebuildStarted()
 
 	err := setupDirs(r.workDir)
 	if err != nil {
@@ -174,7 +175,6 @@ func (r *GwRebuild) RebuildSetup() error {
 }
 
 func (r *GwRebuild) Yield() {
-	defer r.Event()
 
 	r.loadfFilesAfterProcess()
 
@@ -191,7 +191,6 @@ func (r *GwRebuild) copyTargetFile() error {
 }
 
 func (r *GwRebuild) CheckIfExpired() error {
-	defer r.Event()
 	r.FileType = "pdf"
 	r.args = fmt.Sprintf("%s fileType=%s", r.args, r.FileType)
 
@@ -296,7 +295,6 @@ func (r *GwRebuild) exe() error {
 }
 
 func (r *GwRebuild) Execute() error {
-	r.event.RebuildStarted()
 
 	b, err := gwCliExec(r.args)
 	if err != nil {
@@ -407,8 +405,17 @@ func (r *GwRebuild) Event() error {
 		ev.RebuildStarted()
 		ev.RebuildCompleted(gwoutcome)
 	}
+	b, err := r.event.MarshalJson()
+	if err != nil {
 
-	b, err := ev.MarshalJson()
+		return err
+	}
+	r.Metadata = b
+	return nil
+}
+
+func (r *GwRebuild) StopRecordEvent() error {
+	b, err := r.event.MarshalJson()
 	if err != nil {
 
 		return err
