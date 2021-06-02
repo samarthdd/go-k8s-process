@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-ini/ini"
+	"github.com/k8-proxy/go-k8s-process/events"
 
 	zlog "github.com/rs/zerolog/log"
 )
@@ -63,11 +65,20 @@ type GwRebuild struct {
 	ReportFile  []byte
 	LogFile     []byte
 	GwLogFile   []byte
+	Metadata    []byte
 }
 
 func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 
 	fullpath := filepath.Join(INPUT, randDir)
+
+	if len(file) > 512 {
+		c := http.DetectContentType(file[:511])
+		if c == "application/zip" {
+			fileType = "zip"
+		}
+
+	}
 
 	gwRebuild := GwRebuild{
 		File:     file,
@@ -105,6 +116,8 @@ func (r *GwRebuild) Rebuild() error {
 	err := setupDirs(r.workDir)
 	if err != nil {
 		r.statusMessage = "INTERNAL ERROR"
+		r.event()
+
 		return err
 	}
 
@@ -113,15 +126,49 @@ func (r *GwRebuild) Rebuild() error {
 	err = ioutil.WriteFile(path, r.File, 0666)
 	if err != nil {
 		r.statusMessage = "INTERNAL ERROR"
-		return err
-	}
-	err = r.exe()
-
-	if err != nil {
-		r.statusMessage = "INTERNAL ERROR"
+		r.event()
 
 		return err
 	}
+
+	if r.FileType == "zip" {
+		zipProc := zipProcess{
+			workdir:   filepath.Dir(path),
+			zipEntity: nil,
+			ext:       "",
+		}
+		err = r.extractZip(&zipProc)
+		if err != nil {
+			r.statusMessage = "INTERNAL ERROR"
+			r.event()
+
+			return err
+		}
+
+		err = r.exe()
+		if err != nil {
+			r.statusMessage = "INTERNAL ERROR"
+			r.event()
+
+			return err
+		}
+
+		r.zipAll(zipProc, "")
+		r.zipAll(zipProc, ".xml")
+		r.zipAll(zipProc, ".log")
+
+	} else {
+
+		err = r.exe()
+
+		if err != nil {
+			r.statusMessage = "INTERNAL ERROR"
+			r.event()
+
+			return err
+		}
+	}
+
 	r.FileProcessed()
 
 	if r.LogFile != nil {
@@ -133,6 +180,7 @@ func (r *GwRebuild) Rebuild() error {
 
 		if err != nil {
 			r.statusMessage = "INTERNAL ERROR"
+			r.event()
 
 			return err
 		}
@@ -141,6 +189,7 @@ func (r *GwRebuild) Rebuild() error {
 		r.RebuildStatus()
 
 	}
+	r.event()
 
 	return nil
 }
@@ -214,9 +263,11 @@ func (r *GwRebuild) exe() error {
 		return err
 	}
 
-	err = inikey(sec, FILETYPEKEY, r.FileType)
-	if err != nil {
-		return err
+	if r.FileType != "zip" {
+		err = inikey(sec, FILETYPEKEY, r.FileType)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = cfg.SaveTo(randConfigini)
@@ -270,6 +321,12 @@ func (r *GwRebuild) RebuildStatus() {
 	b := r.LogFile
 
 	r.statusMessage = parseStatus(string(b))
+
+	if r.FileType == "zip" {
+		if r.statusMessage == "CLEAN" || r.statusMessage == "UNPROCESSABLE" {
+			r.statusMessage = "CLEANED"
+		}
+	}
 
 }
 
@@ -346,7 +403,11 @@ func (r *GwRebuild) GwFileLog() ([]byte, error) {
 }
 
 func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
-
+	if r.FileType == "zip" {
+		if len(fileNameExt) > 1 {
+			fileNameExt = fileNameExt[1:]
+		}
+	}
 	pathManaged := fmt.Sprintf("%s/%s/%s/%s%s", r.workDir, REBUILDOUTPUT, MANAGED, r.FileName, fileNameExt)
 	pathNonconforming := fmt.Sprintf("%s/%s/%s/%s%s", r.workDir, REBUILDOUTPUT, NONCONFORMING, r.FileName, fileNameExt)
 
@@ -437,4 +498,77 @@ func parseLogExpir(s string) string {
 		return "SDK EXPIRED"
 	}
 	return ""
+}
+
+func (r *GwRebuild) extractZip(z *zipProcess) error {
+	err := z.openZip(r.FileName)
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(filepath.Join(z.workdir, r.FileName))
+
+	return nil
+}
+
+func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
+	path := fmt.Sprintf("%s/%s", r.workDir, REBUILDOUTPUT)
+
+	z.ext = ext
+	z.workdir = path
+	z.readAllFilesExt(NONCONFORMING)
+	z.readAllFilesExt(MANAGED)
+
+	if len(ext) > 1 {
+		ext = ext[1:]
+	}
+
+	outName := fmt.Sprintf("%s%s", r.FileName, ext)
+	z.workdir = filepath.Join(path, MANAGED)
+	err := z.writeZip(outName)
+
+	return err
+}
+func (r *GwRebuild) event() error {
+	var ev events.EventManager
+	ev = events.EventManager{FileId: r.FileName}
+	ev.NewDocument("00000000-0000-0000-0000-000000000000")
+
+	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
+
+		fileType := parseContnetType(http.DetectContentType(r.File[:511]))
+
+		ev.FileTypeDetected(fileType)
+		gwoutcome := Gwoutcome(r.statusMessage)
+
+		ev.RebuildStarted()
+		ev.RebuildCompleted(gwoutcome)
+	}
+
+	b, err := ev.MarshalJson()
+	if err != nil {
+
+		return err
+	}
+	r.Metadata = b
+	return nil
+}
+
+func Gwoutcome(status string) string {
+	switch status {
+	case "CLEAN", "CLEANED":
+		return "replace"
+	case "UNPROCESSABLE":
+		return "unmodified"
+	case "SDK EXPIRED", "INTERNAL ERROR":
+		return "failed"
+	}
+	return ""
+}
+func parseContnetType(s string) string {
+	sl := strings.Split(s, "/")
+	if len(sl) > 1 {
+		return sl[1]
+	}
+	return s
 }
