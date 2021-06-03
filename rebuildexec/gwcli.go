@@ -145,6 +145,9 @@ func (r *GwRebuild) YieldZip() {
 	r.loadfFilesAfterProcess()
 
 	r.rebuildStatus()
+	r.event.RebuildCompleted(gwoutcome(r.statusMessage))
+	r.StopRecordEvent()
+
 }
 
 func (r *GwRebuild) RebuildSetup() error {
@@ -180,7 +183,7 @@ func (r *GwRebuild) Yield() {
 
 	r.rebuildStatus()
 	r.event.RebuildCompleted(gwoutcome(r.statusMessage))
-
+	r.StopRecordEvent()
 }
 
 func (r *GwRebuild) copyTargetFile() error {

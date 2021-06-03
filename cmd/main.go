@@ -308,7 +308,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 			}
 			d["rebuild-processing-status"] = fd.PrintStatus()
 
-			zlog.Error().Err(err).Msg("error failed to rebuild file")
+			zlog.Error().Err(err).Msg("error failed to check file")
 
 		}
 		err = fd.Execute()
@@ -319,7 +319,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 			}
 			d["rebuild-processing-status"] = fd.PrintStatus()
 
-			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
+			zlog.Error().Err(err).Msg("error failed to check file")
 
 		}
 	}
