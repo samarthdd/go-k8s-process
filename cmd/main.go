@@ -242,8 +242,9 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	randPath := rebuildexec.RandStringRunes(16)
 	fileTtype := "*" // wild card
-
-	fd, err := GWRF(f, fileid, fileTtype, randPath)
+	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
+	err := fd.Rebuild()
+	//fd, err := GWRF(f, fileid, fileTtype, randPath)
 
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 	if err != nil {
