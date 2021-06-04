@@ -70,34 +70,65 @@ const (
 type amqpHeadersCarrier map[string]interface{}
 
 func main() {
+	var podProcessTracer opentracing.Tracer
+	var spanpod opentracing.Span
 	JeagerStatusEnv := os.Getenv("JAEGER_AGENT_ON")
 	if JeagerStatusEnv == "true" {
 		JeagerStatus = true
+		tracer, closer := tracing.Init("process-pod")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		podProcessTracer = tracer
+		spanpod = podProcessTracer.StartSpan("pod")
+		spanpod.SetTag("process-pod", "try-start")
+		defer spanpod.Finish()
+		spanpod.LogKV("error", "false")
 	} else {
 		JeagerStatus = false
 	}
+
 	// Get a connection
 	connection, err := rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connection ")
+		if JeagerStatusEnv == "true" {
+
+			spanpod.LogKV("error", "true")
+			spanpod.LogKV("error-msg", err)
+		}
 	}
 
 	// Initiate a publisher on processing exchange
 	publisher, err = rabbitmq.NewQueuePublisher(connection, ProcessingOutcomeExchange, amqp.ExchangeDirect)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq publisher ")
+		if JeagerStatusEnv == "true" {
+
+			spanpod.LogKV("error", "true")
+			spanpod.LogKV("error-msg", err)
+		}
 	}
 
 	// Start a consumer
 	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq consumer ")
+		if JeagerStatusEnv == "true" {
+
+			spanpod.LogKV("error", "true")
+			spanpod.LogKV("error-msg", err)
+		}
 	}
 	defer ch.Close()
 
 	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start minio client ")
+		if JeagerStatusEnv == "true" {
+
+			spanpod.LogKV("error", "true")
+			spanpod.LogKV("error-msg", err)
+		}
 	}
 
 	log.Printf("\033[32m GW rebuild SDK version : %s\n", rebuildexec.GetSdkVersion())
@@ -111,8 +142,11 @@ func main() {
 			zlog.Info().Msg("received message from queue ")
 
 			err := ProcessMessage(d.Headers)
+			if JeagerStatus == true {
+				processend(err, d.Headers)
+			}
 			if err != nil {
-				processend(err)
+
 				zlog.Error().Err(err).Msg("error Failed to process message")
 			}
 
@@ -126,13 +160,66 @@ func main() {
 	<-forever
 
 }
-func processend(err error) {
-	if JeagerStatus == true && ctx != nil {
-		fmt.Println(err)
+func processend(err error, d amqp.Table) {
+	if err != nil {
+		tracer, closer := tracing.Init("error-process")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		spCtx, ctxsuberr := ExtractWithTracer(d, ProcessTracer)
+		if ctxsuberr != nil {
+			zlog.Error().Err(ctxsuberr).Msg("error Jaeger Extract With Tracer")
+		}
+		sp := opentracing.StartSpan(
+			"go-k8s-process-error",
+			opentracing.FollowsFrom(spCtx),
+		)
+		if d["file-id"] == nil {
+			helloTo = "nil-file-id"
+		} else {
+			helloTo = d["file-id"].(string)
+
+		}
+		sp.SetTag("file-id", helloTo)
+		defer sp.Finish()
+		ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
+		defer cancel()
+		// Update the context with the span for the subsequent reference.
+		ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
 
 		span, _ := opentracing.StartSpanFromContext(ctx, "ProcessingEndError")
 		defer span.Finish()
-		span.LogKV("event", err)
+		span.LogKV("error", "true")
+		span.LogKV("error-msg", err)
+	} else {
+		tracer, closer := tracing.Init("successful-process")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		spCtx, ctxsuberr := ExtractWithTracer(d, ProcessTracer)
+		if ctxsuberr != nil {
+			zlog.Error().Err(ctxsuberr).Msg("error Jaeger Extract With Tracer")
+		}
+		sp := opentracing.StartSpan(
+			"go-k8s-process-successful",
+			opentracing.FollowsFrom(spCtx),
+		)
+		if d["file-id"] == nil {
+			helloTo = "nil-file-id"
+		} else {
+			helloTo = d["file-id"].(string)
+
+		}
+		sp.SetTag("file-id", helloTo)
+		defer sp.Finish()
+		ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
+		defer cancel()
+		// Update the context with the span for the subsequent reference.
+		ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+
+		span, _ := opentracing.StartSpanFromContext(ctx, "ProcessingEndsuccessful")
+		defer span.Finish()
+		span.LogKV("error", "false")
+		span.LogKV("error-msg", "false")
+
 	}
 
 }
@@ -147,16 +234,15 @@ func ProcessMessage(d amqp.Table) error {
 		}
 
 		if d["uber-trace-id"] != nil {
-
+			// Extract the span context out of the AMQP header.
 			spCtx, ctxsuberr := ExtractWithTracer(d, ProcessTracer)
 			if spCtx == nil {
 				fmt.Println("cpctxsub nil 1")
 			}
 			if ctxsuberr != nil {
-				fmt.Println(ctxsuberr)
+				zlog.Error().Err(ctxsuberr).Msg("error Jaeger Extract With Tracer")
 			}
 
-			// Extract the span context out of the AMQP header.
 			sp := opentracing.StartSpan(
 				"go-k8s-process",
 				opentracing.FollowsFrom(spCtx),
@@ -173,7 +259,6 @@ func ProcessMessage(d amqp.Table) error {
 			defer cancel()
 			// Update the context with the span for the subsequent reference.
 			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
-			zlog.Info().Msg("file downloaded from minio successfully")
 
 		} else {
 			if d["file-id"] == nil {
