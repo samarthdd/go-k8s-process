@@ -1,8 +1,6 @@
 package rebuildexec
 
 import (
-	"io/ioutil"
-	"log"
 	"testing"
 )
 
@@ -52,9 +50,15 @@ const (
 )
 
 func TestCmp(t *testing.T) {
-	b := cmpJsontoXml([]byte(cmpJsonSample))
-	ioutil.WriteFile("xml.xml", b, 0777)
-	log.Println(string(b))
+	p, err := cmpJsonMarshal([]byte(cmpJsonSample))
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = p.cmpXmlconv()
+	if err != nil {
+		t.Error(err)
+	}
+
 }
 
 //get

@@ -136,7 +136,7 @@ func newRebuild(filepath string) GwRebuild {
 	randPath := RandStringRunes(16)
 	f := openSampleFile(filepath)
 
-	rb := New(f, sampleFileName, "*", randPath)
+	rb := New(f, nil, sampleFileName, "*", randPath)
 	return rb
 }
 
@@ -348,7 +348,7 @@ func TestRebuildFile(t *testing.T) {
 
 	f, _ := ioutil.ReadFile(filepath.Join(mainProjectPath, depDirTemp, "sample.pdf"))
 	randPath := RandStringRunes(16)
-	fd := New(f, "samplee.pdf", "*", randPath)
+	fd := New(f, nil, "samplee.pdf", "*", randPath)
 	err := fd.Rebuild()
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 
@@ -392,7 +392,7 @@ func TestRebuildZip(t *testing.T) {
 
 	f, _ := ioutil.ReadFile(zipPath)
 	randPath := RandStringRunes(16)
-	fd := New(f, "nested.zip", "zip", randPath)
+	fd := New(f, nil, "nested.zip", "zip", randPath)
 	err := fd.Rebuild()
 	log.Printf("\033[34m rebuild status a is  : %s\n", fd.PrintStatus())
 
@@ -420,4 +420,3 @@ func TestParseContnetType(t *testing.T) {
 		}
 	}
 }
-

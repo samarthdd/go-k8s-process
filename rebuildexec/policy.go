@@ -3,7 +3,6 @@ package rebuildexec
 import (
 	"encoding/json"
 	"encoding/xml"
-	"log"
 )
 
 const (
@@ -133,17 +132,23 @@ type Config struct {
 	} `xml:"xlsConfig"`
 }
 
-func cmpJsontoXml(b []byte) []byte {
-	cmp := ContentManagementFlags{}
+func cmpJsonMarshal(b []byte) (policy, error) {
+
+	cmp := policy{}
 	if err := json.Unmarshal(b, &cmp); err != nil {
-		log.Fatal(err)
+		return policy{}, err
 	}
+	return cmp, nil
+}
+
+func (cmp *policy) cmpXmlconv() ([]byte, error) {
+
 	cmpXml := XmlConfig{
 		XMLName:                     xml.Name{},
-		PdfContentManagement:        cmp.PdfContentManagement,
-		WordContentManagement:       cmp.WordContentManagement,
-		PowerPointContentManagement: cmp.PowerPointContentManagement,
-		ExcelContentManagement:      cmp.ExcelContentManagement,
+		PdfContentManagement:        cmp.ContentManagementFlags.PdfContentManagement,
+		WordContentManagement:       cmp.ContentManagementFlags.WordContentManagement,
+		PowerPointContentManagement: cmp.ContentManagementFlags.PowerPointContentManagement,
+		ExcelContentManagement:      cmp.ContentManagementFlags.ExcelContentManagement,
 	}
 	cmpXml.PdfContentManagement.cmpNumToStr()
 	cmpXml.WordContentManagement.cmpNumToStr()
@@ -152,10 +157,10 @@ func cmpJsontoXml(b []byte) []byte {
 
 	xmlB, err := xml.MarshalIndent(cmpXml, "", "   ")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	xmlB = append([]byte(xml.Header), xmlB...)
-	return xmlB
+	return xmlB, nil
 
 }
 

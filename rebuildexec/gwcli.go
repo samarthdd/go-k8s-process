@@ -59,6 +59,8 @@ type GwRebuild struct {
 	FileType string
 	workDir  string
 
+	cmp policy
+
 	statusMessage string
 
 	RebuiltFile []byte
@@ -68,7 +70,7 @@ type GwRebuild struct {
 	Metadata    []byte
 }
 
-func New(file []byte, fileName, fileType, randDir string) GwRebuild {
+func New(file, cmp []byte, fileName, fileType, randDir string) GwRebuild {
 
 	fullpath := filepath.Join(INPUT, randDir)
 
@@ -79,9 +81,14 @@ func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 		}
 
 	}
+	cmPolicy, err := cmpJsonMarshal(cmp)
+	if err != nil {
+		log.Println(err)
+	}
 
 	gwRebuild := GwRebuild{
 		File:     file,
+		cmp:      cmPolicy,
 		FileName: fileName,
 		FileType: fileType,
 		workDir:  fullpath,
@@ -238,10 +245,19 @@ func (r *GwRebuild) exe() error {
 		return err
 	}
 
-	cmd = exec.Command("cp", xmlconfig, randXmlconfig)
-	err = cmd.Run()
-	if err != nil {
-		return err
+	xmlCmp, err := r.cmp.cmpXmlconv()
+	if err == nil {
+		ioutil.WriteFile(randXmlconfig, xmlCmp, 0777)
+		if err != nil {
+			return err
+		}
+	} else {
+
+		cmd = exec.Command("cp", xmlconfig, randXmlconfig)
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
 	}
 
 	cfg, err := ini.Load(randConfigini)
