@@ -59,8 +59,8 @@ type GwRebuild struct {
 	FileType string
 	workDir  string
 
-	cmp policy
-
+	cmp           policy
+	cmpState      bool
 	statusMessage string
 
 	RebuiltFile []byte
@@ -81,14 +81,19 @@ func New(file, cmp []byte, fileName, fileType, randDir string) GwRebuild {
 		}
 
 	}
-	cmPolicy, err := cmpJsonMarshal(cmp)
-	if err != nil {
-		log.Println(err)
+
+	cmpState := false
+	cmPolicy := policy{}
+	if len(cmp) > 0 {
+		cmpState = true
+		cmPolicy, _ = cmpJsonMarshal(cmp)
+
 	}
 
 	gwRebuild := GwRebuild{
 		File:     file,
 		cmp:      cmPolicy,
+		cmpState: cmpState,
 		FileName: fileName,
 		FileType: fileType,
 		workDir:  fullpath,
@@ -245,11 +250,12 @@ func (r *GwRebuild) exe() error {
 		return err
 	}
 
-	xmlCmp, err := r.cmp.cmpXmlconv()
-	if err == nil {
-		ioutil.WriteFile(randXmlconfig, xmlCmp, 0777)
-		if err != nil {
-			return err
+	if r.cmpState {
+		xmlCmp, _ := r.cmp.cmpXmlconv()
+
+		errWrite := ioutil.WriteFile(randXmlconfig, xmlCmp, 0777)
+		if errWrite != nil {
+			return errWrite
 		}
 	} else {
 
@@ -548,7 +554,12 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 func (r *GwRebuild) event() error {
 	var ev events.EventManager
 	ev = events.EventManager{FileId: r.FileName}
-	ev.NewDocument("00000000-0000-0000-0000-000000000000")
+
+	policyId := "00000000-0000-0000-0000-000000000000"
+	if r.cmp.PolicyId != "" {
+		policyId = r.cmp.PolicyId
+	}
+	ev.NewDocument(policyId)
 
 	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
 

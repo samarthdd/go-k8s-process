@@ -1,6 +1,9 @@
 package rebuildexec
 
 import (
+	"bytes"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 )
 
@@ -50,14 +53,20 @@ const (
 )
 
 func TestCmp(t *testing.T) {
-	p, err := cmpJsonMarshal([]byte(cmpJsonSample))
+
+	bjson, _ := ioutil.ReadFile("/home/ibrahim/legacy/gowork/icaptest/mq-demo/appsettings.json")
+
+	bjson = bytes.TrimPrefix(bjson, []byte("\xef\xbb\xbf"))
+	p, err := cmpJsonMarshal(bjson)
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = p.cmpXmlconv()
+	b, err := p.cmpXmlconv()
 	if err != nil {
 		t.Error(err)
 	}
+	s := filepath.Join(mainProjectPath, "tmp", "xml.xml")
+	ioutil.WriteFile(s, b, 0777)
 
 }
 
