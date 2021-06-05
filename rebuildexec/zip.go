@@ -24,7 +24,6 @@ type ziphelper struct {
 }
 
 func (z *zipProcess) openZip(path string) error {
-	randStr := RandStringRunes(16)
 	fpath := filepath.Join(z.workdir, path)
 	r, err := zip.OpenReader(fpath)
 
@@ -37,6 +36,8 @@ func (z *zipProcess) openZip(path string) error {
 	// Iterate through the files in the archive,
 	// printing some of their contents.
 	for _, f := range r.File {
+		randStr := RandStringRunes(16)
+
 		rc, err := f.Open()
 		if err != nil {
 			return err
