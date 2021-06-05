@@ -58,9 +58,11 @@ var (
 	minioClient   *miniov7.Client
 	ctx           context.Context
 	helloTo       string
-	helloStr      string
 	ProcessTracer opentracing.Tracer
 	JeagerStatus  bool
+	connrecive    *amqp.Connection
+	connsend      *amqp.Connection
+	helloStr      string
 )
 
 const (
@@ -86,11 +88,22 @@ func main() {
 	} else {
 		JeagerStatus = false
 	}
+	var err error
 
-	// Get a connection
-	connection, err := rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
+	// Get a connrecive
+	connrecive, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connection ")
+		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connrecive ")
+		if JeagerStatusEnv == "true" {
+
+			spanpod.LogKV("error", "true")
+			spanpod.LogKV("error-msg", err)
+		}
+	}
+	// Get a send
+	connsend, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
+	if err != nil {
+		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connrecive ")
 		if JeagerStatusEnv == "true" {
 
 			spanpod.LogKV("error", "true")
@@ -99,7 +112,7 @@ func main() {
 	}
 
 	// Initiate a publisher on processing exchange
-	publisher, err = rabbitmq.NewQueuePublisher(connection, ProcessingOutcomeExchange, amqp.ExchangeDirect)
+	publisher, err = rabbitmq.NewQueuePublisher(connsend, ProcessingOutcomeExchange, amqp.ExchangeDirect)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq publisher ")
 		if JeagerStatusEnv == "true" {
@@ -110,7 +123,7 @@ func main() {
 	}
 
 	// Start a consumer
-	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
+	msgs, ch, err := rabbitmq.NewQueueConsumerQos(connrecive, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq consumer ")
 		if JeagerStatusEnv == "true" {
@@ -119,6 +132,7 @@ func main() {
 			spanpod.LogKV("error-msg", err)
 		}
 	}
+
 	defer ch.Close()
 
 	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
@@ -138,6 +152,7 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
+			d.Ack(true)
 
 			zlog.Info().Msg("received message from queue ")
 
@@ -145,6 +160,7 @@ func main() {
 			if JeagerStatus == true {
 				processend(err, d.Headers)
 			}
+			connsend.Close()
 			if err != nil {
 
 				zlog.Error().Err(err).Msg("error Failed to process message")
@@ -161,6 +177,7 @@ func main() {
 
 }
 func processend(err error, d amqp.Table) {
+
 	if err != nil {
 		tracer, closer := tracing.Init("error-process")
 		defer closer.Close()
@@ -225,6 +242,8 @@ func processend(err error, d amqp.Table) {
 }
 
 func ProcessMessage(d amqp.Table) error {
+	connrecive.Close()
+
 	if JeagerStatus == true {
 		if JeagerStatus == true {
 			tracer, closer := tracing.Init("process")
