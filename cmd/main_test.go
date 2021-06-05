@@ -34,18 +34,18 @@ func TestProcessMessage(t *testing.T) {
 	fakeServer := server.NewServer("amqp://localhost:5672/%2f")
 	fakeServer.Start()
 
-	// Connects opens an AMQP connection from the credentials in the URL.
+	// Connects opens an AMQP connrecive from the credentials in the URL.
 	//	publish(uri, queueName, exchange, exchangeType, body, reliable)
 	log.Println("[-] Connecting to", uri)
-	connection, err := amqptest.Dial("amqp://localhost:5672/%2f") // now it works =D
+	connrecive, err := amqptest.Dial("amqp://localhost:5672/%2f") // now it works =D
 
 	if err != nil {
-		log.Fatalf("[x] AMQP connection error: %s", err)
+		log.Fatalf("[x] AMQP connrecive error: %s", err)
 	}
 
 	log.Println("[√] Connected successfully")
 
-	channel, err := connection.Channel()
+	channel, err := connrecive.Channel()
 
 	if err != nil {
 		log.Fatalf("[x] Failed to open a channel: %s", err)
@@ -129,15 +129,15 @@ func confirmOne(confirms <-chan wabbit.Confirmation) {
 }
 func publish(uri string, queueName string, exchange string, exchangeType string, body string, reliable bool) {
 	log.Println("[-] Connecting to", uri)
-	connection, err := amqptest.Dial("amqp://localhost:5672/%2f") // now it works =D
+	connrecive, err := amqptest.Dial("amqp://localhost:5672/%2f") // now it works =D
 
 	if err != nil {
-		log.Fatalf("[x] AMQP connection error: %s", err)
+		log.Fatalf("[x] AMQP connrecive error: %s", err)
 	}
 
 	log.Println("[√] Connected successfully")
 
-	channel, err := connection.Channel()
+	channel, err := connrecive.Channel()
 
 	if err != nil {
 		log.Fatalf("[x] Failed to open a channel: %s", err)
