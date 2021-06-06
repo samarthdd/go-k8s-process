@@ -1,233 +1,522 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
+	"fmt"
 	"log"
+	"math/big"
+	"net/http"
+	"os"
+	"reflect"
 	"testing"
+	"time"
 
-	"github.com/NeowayLabs/wabbit"
-	"github.com/NeowayLabs/wabbit/amqptest"
-	"github.com/NeowayLabs/wabbit/amqptest/server"
+	"github.com/k8-proxy/go-k8s-process/tracing"
+	"github.com/k8-proxy/k8-go-comm/pkg/minio"
+	"github.com/k8-proxy/k8-go-comm/pkg/rabbitmq"
+	min7 "github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/opentracing/opentracing-go"
+	"github.com/ory/dockertest/v3"
+	"github.com/ory/dockertest/v3/docker"
 	"github.com/streadway/amqp"
 )
 
-var (
-	uri          = "amqp://guest:guest@localhost:5672/%2f"
-	queueName    = "test-queue"
-	exchange     = "test-exchange"
-	exchangeType = "direct"
-	body         = "body test"
-	reliable     = true
-)
+// var body = "body test"
+var TestMQTable amqp.Table
+var endpoint string
+var ResourceMQ *dockertest.Resource
+var ResourceMinio *dockertest.Resource
+var ResourceJG *dockertest.Resource
 
-type Delivery struct {
-	data          []byte
-	headers       wabbit.Option
-	tag           uint64
-	consumerTag   string
-	originalRoute string
-	messageId     string
-	channel       wabbit.Channel
+var poolMq *dockertest.Pool
+var poolMinio *dockertest.Pool
+var poolJG *dockertest.Pool
+
+var secretsstring string
+var thisServiceName = "test-procc"
+
+func jaegerserver() {
+	var errpool error
+
+	poolJG, errpool = dockertest.NewPool("")
+	if errpool != nil {
+		log.Fatalf("Could not connect to docker: %s", errpool)
+	}
+	opts := dockertest.RunOptions{
+		Repository: "jaegertracing/all-in-one",
+		Tag:        "latest",
+
+		PortBindings: map[docker.Port][]docker.PortBinding{
+			"5775/udp": {{HostPort: "5775"}},
+			"6831/udp": {{HostPort: "6831"}},
+			"6832/udp": {{HostPort: "6832"}},
+			"5778/tcp": {{HostPort: "5778"}},
+			"16686":    {{HostPort: "16686"}},
+			"14268":    {{HostPort: "14268"}},
+			"9411":     {{HostPort: "9411"}},
+		},
+	}
+	resource, err := poolJG.RunWithOptions(&opts)
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err.Error())
+	}
+	ResourceJG = resource
+
+}
+func rabbitserver() {
+	var errpool error
+
+	poolMq, errpool = dockertest.NewPool("")
+	if errpool != nil {
+		log.Fatalf("Could not connect to docker: %s", errpool)
+	}
+	opts := dockertest.RunOptions{
+		Repository: "rabbitmq",
+		Tag:        "latest",
+		Env: []string{
+			"host=root",
+		},
+		ExposedPorts: []string{"5672"},
+		PortBindings: map[docker.Port][]docker.PortBinding{
+			"5672": {
+				{HostPort: "5672"},
+			},
+		},
+	}
+	resource, err := poolMq.RunWithOptions(&opts)
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err.Error())
+	}
+	ResourceMQ = resource
+
+}
+
+// Minio server
+func minioserver() {
+	var errpool error
+
+	minioAccessKey = secretsstring
+	minioSecretKey = secretsstring
+
+	poolMinio, errpool = dockertest.NewPool("")
+	if errpool != nil {
+		log.Fatalf("Could not connect to docker: %s", errpool)
+	}
+
+	options := &dockertest.RunOptions{
+		Repository: "minio/minio",
+		Tag:        "latest",
+		Cmd:        []string{"server", "/data"},
+		PortBindings: map[docker.Port][]docker.PortBinding{
+			"9000/tcp": {{HostPort: "9000"}},
+		},
+		Env: []string{fmt.Sprintf("MINIO_ACCESS_KEY=%s", minioAccessKey), fmt.Sprintf("MINIO_SECRET_KEY=%s", minioSecretKey)},
+	}
+
+	resource, err := poolMinio.RunWithOptions(options)
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err)
+	}
+	ResourceMinio = resource
+
+	endpoint = fmt.Sprintf("localhost:%s", resource.GetPort("9000/tcp"))
+	minioEndpoint = endpoint
+
+	cleanMinioBucket = os.Getenv("MINIO_CLEAN_BUCKET")
+	if err := poolMinio.Retry(func() error {
+		url := fmt.Sprintf("http://%s/minio/health/live", endpoint)
+		resp, err := http.Get(url)
+		if err != nil {
+			return fmt.Errorf(err.Error())
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("status code not OK")
+		}
+		return nil
+	}); err != nil {
+		log.Fatalf("Could not connect to docker: %s", err)
+	}
+
 }
 
 func TestProcessMessage(t *testing.T) {
-	JeagerStatus = false
-	fakeServer := server.NewServer("amqp://localhost:5672/%2f")
-	fakeServer.Start()
+	log.Println("[√] start test")
+	JeagerStatus = true
 
-	// Connects opens an AMQP connection from the credentials in the URL.
-	//	publish(uri, queueName, exchange, exchangeType, body, reliable)
-	log.Println("[-] Connecting to", uri)
-	connection, err := amqptest.Dial("amqp://localhost:5672/%2f") // now it works =D
+	ProcessingRequestExchange = "processing-request-exchange"
+	ProcessingRequestRoutingKey = "processing-request"
+	ProcessingRequestQueueName = "processing-request"
 
-	if err != nil {
-		log.Fatalf("[x] AMQP connection error: %s", err)
+	ProcessingOutcomeExchange = "processing-outcome-exchange"
+	ProcessingOutcomeRoutingKey = "processing-outcome"
+	ProcessingOutcomeQueueName = "processing-outcome-queue"
+
+	// get env secrets
+	var errstring error
+
+	secretsstring, errstring = GenerateRandomString(8)
+	if errstring != nil {
+		log.Fatalf("[x] GenerateRandomString error: %s", errstring)
+
+		return
 	}
 
-	log.Println("[√] Connected successfully")
+	minioAccessKey = secretsstring
+	minioSecretKey = secretsstring
+	if JeagerStatus == true {
+		jaegerserver()
+		log.Println("[√] create Jaeger  successfully")
+		tracer, closer := tracing.Init(thisServiceName)
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer = tracer
+		log.Println("[√] create Jaeger ProcessTracer successfully")
 
-	channel, err := connection.Channel()
-
-	if err != nil {
-		log.Fatalf("[x] Failed to open a channel: %s", err)
+		tracer, closer = tracing.Init("outMsgs")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer = tracer
+		log.Println("[√] create Jaeger ProcessTracer2 successfully")
 	}
 
-	defer channel.Close()
-	headers := make(amqp.Table)
-	headers["file-id"] = "544"
-	headers["source-presigned-url"] = "https://s23.q4cdn.com/202968100/files/doc_downloads/test.pdf"
-	headers["rebuilt-file-location"] = "./rbulid"
+	rabbitserver()
+	log.Println("[√] create AMQP  successfully")
+
+	minioserver()
+	log.Println("[√] create minio  successfully")
+
+	time.Sleep(40 * time.Second)
+
+	var err error
+	// Get a connrecive //rabbitmq
+
+	connrecive, err = amqp.Dial("amqp://localhost:5672")
+	if err != nil {
+		log.Fatalf("[x] AMQP connrecive error: %s", err)
+	}
+	connsend, err = amqp.Dial("amqp://localhost:5672")
+	if err != nil {
+		log.Fatalf("[x] AMQP connrecive error: %s", err)
+	}
+	log.Println("[√] AMQP Connected successfully")
+	defer connrecive.Close()
+	// now we can instantiate minio client
+	minioClient, err = min7.New(endpoint, &min7.Options{
+		Creds:  credentials.NewStaticV4(minioAccessKey, minioSecretKey, ""),
+		Secure: false,
+	})
+	if err != nil {
+		log.Fatalf("[x] Failed to create minio client error: %s", err)
+		return
+	}
+	log.Println("[√] create minio client successfully")
+	// Start a consumer
+	_, ch, err := rabbitmq.NewQueueConsumerQos(connrecive, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
+	if err != nil {
+		log.Fatalf("[x] could not start  AdpatationReuquest consumer error: %s", err)
+	}
+	log.Println("[√] create start  Adpatation Reuquest consumer successfully")
+	defer ch.Close()
+	defer ch.Close()
+
+	_, outChannel, err := rabbitmq.NewQueueConsumerQos(connsend, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
+	if err != nil {
+		log.Fatalf("[x] Failed to create consumer error: %s", err)
+
+	}
+
+	log.Println("[√] create  consumer successfully")
+	publisher, err = rabbitmq.NewQueuePublisher(connsend, ProcessingOutcomeExchange, amqp.ExchangeDirect)
+	if err != nil {
+		log.Println("[x] create  consumer publisher")
+
+	}
+	log.Println("[√] create  consumer publisher")
+
+	defer outChannel.Close()
+
+	sourceMinioBucket := "source"
+	cleanMinioBucket = "clean"
+
+	err = createBucketIfNotExist(sourceMinioBucket)
+	if err != nil {
+		log.Fatalf("[x] sourceMinioBucket createBucketIfNotExist error: %s", err)
+	}
+	log.Println("[√] create source Minio Bucket successfully")
+
+	err = createBucketIfNotExist(cleanMinioBucket)
+	if err != nil {
+		log.Fatalf("[x] cleanMinioBucket createBucketIfNotExist error: %s", err)
+
+	}
+	log.Println("[√] create clean Minio Bucket successfully")
+	fn := "unittest.pdf"
+	fullpath := "http://localhost:9000"
+	fnrebuild := fmt.Sprintf("rebuild-%s", fn)
+	table := amqp.Table{
+		"file-id":               fn,
+		"source-presigned-url":  fullpath,
+		"rebuilt-file-location": fnrebuild,
+		"generate-report":       "true",
+		"request-mode":          "respmod",
+	}
+
 	var d amqp.Delivery
-	d.ConsumerTag = "test-tag"
-	d.Headers = headers
-	d.ContentType = "text/plain"
-	d.Body = []byte(body)
+	d.Headers = table
 	t.Run("ProcessMessage", func(t *testing.T) {
-		ProcessMessage(d.Headers)
+		result := ProcessMessage(table)
+		if result != nil {
+
+			t.Errorf("ProcessMessage(amqp.Delivery) = %d; want nil", result)
+
+		} else {
+			log.Println("[√] ProcessMessage successfully")
+
+		}
 
 	})
 
-	type testSample struct {
-		data          []byte
-		headers       wabbit.Option
-		tag           uint64
-		consumerTag   string
-		originalRoute string
-		messageId     string
-		channel       wabbit.Channel
+	// When you're done, kill and remove the container
+	if err = poolMq.Purge(ResourceMQ); err != nil {
+		fmt.Printf("Could not purge resource: %s", err)
 	}
-	sampleTable := []testSample{
-		{
-			data: []byte("teste"),
-			headers: wabbit.Option{
-				"contentType": "binary/fuzz",
-			},
-			tag: uint64(23473824),
-		},
-		{
-			data: []byte("teste"),
-			headers: wabbit.Option{
-				"contentType": "binary/fuzz",
-			},
-			tag: uint64(23473824),
-		},
+	if err = poolMinio.Purge(ResourceMinio); err != nil {
+		fmt.Printf("Could not purge resource: %s", err)
 	}
+	if JeagerStatus == true {
 
-	for _, sample := range sampleTable {
-
-		t.Run("ProcessMessage", func(t *testing.T) {
-
-			if sample.headers["contentType"].(string) != "binary/fuzz" {
-				t.Errorf("Headers value is nil")
-
-			}
-
-		})
-	}
-
-}
-func publishMessage(body string, exchange string, queue wabbit.Queue, channel wabbit.Channel) error {
-	return channel.Publish(
-		exchange,     // exchange
-		queue.Name(), // routing key
-		[]byte(body),
-		wabbit.Option{
-			"deliveryMode": 2,
-			"contentType":  "text/plain",
-		})
-}
-
-func confirmOne(confirms <-chan wabbit.Confirmation) {
-	log.Printf("[-] Waiting for confirmation of one publishing")
-
-	if confirmed := <-confirms; confirmed.Ack() {
-		log.Printf("[√] Confirmed delivery with delivery tag ")
-
-	} else {
-		log.Printf("[x] Failed delivery of delivery tag: ")
-
-	}
-}
-func publish(uri string, queueName string, exchange string, exchangeType string, body string, reliable bool) {
-	log.Println("[-] Connecting to", uri)
-	connection, err := amqptest.Dial("amqp://localhost:5672/%2f") // now it works =D
-
-	if err != nil {
-		log.Fatalf("[x] AMQP connection error: %s", err)
-	}
-
-	log.Println("[√] Connected successfully")
-
-	channel, err := connection.Channel()
-
-	if err != nil {
-		log.Fatalf("[x] Failed to open a channel: %s", err)
-	}
-
-	defer channel.Close()
-
-	log.Println("[-] Declaring Exchange", exchangeType, exchange)
-	err = channel.ExchangeDeclare(exchange, exchangeType, nil)
-
-	if err != nil {
-		log.Fatalf("[x] Failed to declare exchange: %s", err)
-	}
-	log.Println("[√] Exchange", exchange, "has been declared successfully")
-
-	log.Println("[-] Declaring queue", queueName, "into channel")
-	queue, err := declareQueue(queueName, channel)
-
-	if err != nil {
-		log.Fatalf("[x] Queue could not be declared. Error: %s", err.Error())
-	}
-	log.Println("[√] Queue", queueName, "has been declared successfully")
-
-	err = channel.QueueBind(queueName, queueName, exchange, nil)
-
-	if err != nil {
-		log.Fatalf("[x] QueueBind could not be bind. Error: %s", err.Error())
-		return
-	}
-
-	log.Println("[√] QueueBind", queueName, "has been bind successfully")
-
-	deliveries, err := channel.Consume(
-		queue.Name(), // name
-		"test-tag",   // consumerTag,
-		wabbit.Option{
-			"noAck":     false,
-			"exclusive": false,
-			"noLocal":   false,
-			"noWait":    false,
-		},
-	)
-	if err != nil {
-		log.Fatalf("[x] Failed to deliveries. Error: %s", err.Error())
-		return
-	}
-	log.Println("[√] deliveries", queue.Name(), "has deliveries bind successfully")
-	if reliable {
-		log.Printf("[-] Enabling publishing confirms.")
-		if err := channel.Confirm(false); err != nil {
-			log.Fatalf("[x] Channel could not be put into confirm mode: %s", err)
+		if err = poolJG.Purge(ResourceJG); err != nil {
+			fmt.Printf("Could not purge resource: %s", err)
 		}
-
-		confirms := channel.NotifyPublish(make(chan wabbit.Confirmation, 1))
-
-		defer confirmOne(confirms)
 	}
-
-	log.Println("[-] Sending message to queue:", queueName, "- exchange:", exchange)
-	log.Println("\t", body)
-
-	err = publishMessage(body, exchange, queue, channel)
-
-	if err != nil {
-		log.Fatalf("[x] Failed to publish a message. Error: %s", err.Error())
-	}
-
-	data := <-deliveries
-	if string(data.Body()) != "body test" {
-		log.Fatalf("Failed to publish message to specified route")
-
-	}
-
-	log.Printf(
-		"got %dB delivery: [%v] %q",
-		len(data.Body()),
-		data.DeliveryTag(),
-		data.Body(),
-	)
 
 }
+func GenerateRandomString(n int) (string, error) {
+	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	ret := make([]byte, n)
+	for i := 0; i < n; i++ {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		if err != nil {
+			return "", err
+		}
+		ret[i] = letters[num.Int64()]
+	}
 
-func declareQueue(queueName string, channel wabbit.Channel) (wabbit.Queue, error) {
-	return channel.QueueDeclare(
-		queueName,
-		wabbit.Option{
-			"durable":    true,
-			"autoDelete": false,
-			"exclusive":  false,
-			"noWait":     false,
+	return string(ret), nil
+}
+
+func TestInject(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+
+	type args struct {
+		span opentracing.Span
+		hdrs amqp.Table
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			"Inject",
+			args{span, tableout},
+			false,
 		},
-	)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Inject(tt.args.span, tt.args.hdrs); (err != nil) != tt.wantErr {
+				t.Errorf("Inject() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExtract(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+	Inject(span, d.Headers)
+	spanctx, _ := Extract(d.Headers)
+	type args struct {
+		hdrs amqp.Table
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    opentracing.SpanContext
+		wantErr bool
+	}{
+		{
+			"Extract",
+			args{tableout},
+			spanctx,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Extract(tt.args.hdrs)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Extract() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Extract() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_amqpHeadersCarrier_ForeachKey(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	c := amqpHeadersCarrier(tableout)
+
+	tetsc := c
+
+	type args struct {
+		handler func(key, val string) error
+	}
+	han := args{
+		handler: func(key string, val string) error {
+			return nil
+		},
+	}
+
+	tests := []struct {
+		name    string
+		c       amqpHeadersCarrier
+		args    args
+		wantErr bool
+	}{
+		{
+			"amqpHeadersCarrier",
+			tetsc,
+			han,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.c.ForeachKey(tt.args.handler); (err != nil) != tt.wantErr {
+				t.Errorf("amqpHeadersCarrier.ForeachKey() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExtractWithTracer(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+	Inject(span, d.Headers)
+	spanctx, _ := ExtractWithTracer(d.Headers, ProcessTracer)
+
+	type args struct {
+		hdrs   amqp.Table
+		tracer opentracing.Tracer
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    opentracing.SpanContext
+		wantErr bool
+	}{
+		{
+			"ExtractWithTracer",
+			args{tableout, ProcessTracer},
+			spanctx,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ExtractWithTracer(tt.args.hdrs, tt.args.tracer)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExtractWithTracer() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ExtractWithTracer() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func createBucketIfNotExist(bucketName string) error {
+	if JeagerStatus == true && ctx != nil {
+		span, _ := opentracing.StartSpanFromContext(ctx, "createBucketIfNotExist")
+		defer span.Finish()
+		span.LogKV("event", "createBucket")
+	}
+	exist, err := minio.CheckIfBucketExists(minioClient, bucketName)
+	if err != nil {
+
+		return fmt.Errorf("error creating source  minio bucket : %s", err)
+	}
+	if !exist {
+
+		err := minio.CreateNewBucket(minioClient, bucketName)
+		if err != nil {
+			return fmt.Errorf("error could not create minio bucket : %s", err)
+		}
+	}
+	return nil
 }
