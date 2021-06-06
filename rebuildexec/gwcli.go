@@ -55,6 +55,7 @@ func GetSdkVersion() string {
 
 type GwRebuild struct {
 	File     []byte
+	FileId   string
 	FileName string
 	FileType string
 	workDir  string
@@ -68,9 +69,10 @@ type GwRebuild struct {
 	Metadata    []byte
 }
 
-func New(file []byte, fileName, fileType, randDir string) GwRebuild {
+func New(file []byte, fileId, fileType, randDir string) GwRebuild {
 
 	fullpath := filepath.Join(INPUT, randDir)
+	randstr := RandStringRunes(16)
 
 	if len(file) > 512 {
 		c := http.DetectContentType(file[:511])
@@ -82,7 +84,8 @@ func New(file []byte, fileName, fileType, randDir string) GwRebuild {
 
 	gwRebuild := GwRebuild{
 		File:     file,
-		FileName: fileName,
+		FileId:   fileId,
+		FileName: randstr,
 		FileType: fileType,
 		workDir:  fullpath,
 	}
@@ -531,7 +534,7 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 }
 func (r *GwRebuild) event() error {
 	var ev events.EventManager
-	ev = events.EventManager{FileId: r.FileName}
+	ev = events.EventManager{FileId: r.FileId}
 	ev.NewDocument("00000000-0000-0000-0000-000000000000")
 
 	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
