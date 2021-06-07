@@ -66,7 +66,7 @@ var (
 )
 
 const (
-	presignedUrlExpireIn = time.Hour * 24
+	presignedUrlExpireIn = time.Minute * 10
 )
 
 type amqpHeadersCarrier map[string]interface{}
@@ -93,9 +93,8 @@ func main() {
 	// Get a connrecive
 	connrecive, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connrecive ")
+		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connrecive")
 		if JeagerStatusEnv == "true" {
-
 			spanpod.LogKV("error", "true")
 			spanpod.LogKV("error-msg", err)
 		}
