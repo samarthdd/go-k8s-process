@@ -104,7 +104,7 @@ func (e *EventManager) MarshalJson() ([]byte, error) {
 	meta := Metadata{
 		Events: e.event,
 	}
-	b, err := json.Marshal(meta)
+	b, err := json.MarshalIndent(meta, "", "   ")
 	if err != nil {
 		return nil, err
 

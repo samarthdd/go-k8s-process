@@ -108,17 +108,21 @@ func main() {
 	go func() {
 		for d := range msgs {
 
-			zlog.Info().Msg("received message from queue ")
+			dh := d
+			go func() {
 
-			err := ProcessMessage(d.Headers)
-			if err != nil {
-				processend(err)
-				zlog.Error().Err(err).Msg("error Failed to process message")
-			}
+				zlog.Info().Msg("received message from queue ")
 
-			// Closing the channel to exit
-			zlog.Info().Msg(" closing the channel")
-			close(forever)
+				err := ProcessMessage(dh.Headers)
+				if err != nil {
+					processend(err)
+					zlog.Error().Err(err).Msg("error Failed to process message")
+				}
+
+				// Closing the channel to exit
+				zlog.Info().Msg(" closing the channel")
+			}()
+
 		}
 	}()
 
@@ -242,9 +246,22 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	randPath := rebuildexec.RandStringRunes(16)
 	fileTtype := "*" // wild card
-	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
+
+	if JeagerStatus == true {
+		span, _ := opentracing.StartSpanFromContext(ctx, "rebuild")
+		defer span.Finish()
+		span.LogKV("file-id", fileid)
+	}
+
+	cmp, _ := d["content-managment-policy"].([]byte)
+
+	fd := rebuildexec.New(f, cmp, fileid, fileTtype, randPath)
 	err := fd.Rebuild()
-	//fd, err := GWRF(f, fileid, fileTtype, randPath)
+	if err != nil {
+
+		zlog.Error().Err(err).Msg("error failed to rebuild file")
+
+	}
 
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 	if err != nil {
@@ -368,24 +385,6 @@ func getFile(url string) ([]byte, error) {
 		return f, err
 	}
 	return f, nil
-
-}
-
-// glasswall rbuild file
-func GWRF(f []byte, fileid string, fileTtype string, randPath string) (rebuildexec.GwRebuild, error) {
-	if JeagerStatus == true {
-		span, _ := opentracing.StartSpanFromContext(ctx, "rebuild")
-		defer span.Finish()
-		span.LogKV("file-id", fileid)
-	}
-	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
-	err := fd.Rebuild()
-	if err != nil {
-
-		zlog.Error().Err(err).Msg("error failed to rebuild file")
-
-	}
-	return fd, err
 
 }
 
