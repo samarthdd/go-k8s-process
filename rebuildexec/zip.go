@@ -20,6 +20,7 @@ type ziphelper struct {
 	b        []byte
 	fullName string
 	name     string
+	RandName string
 }
 
 func (z *zipProcess) openZip(path string) error {
@@ -35,6 +36,8 @@ func (z *zipProcess) openZip(path string) error {
 	// Iterate through the files in the archive,
 	// printing some of their contents.
 	for _, f := range r.File {
+		randStr := RandStringRunes(16)
+
 		rc, err := f.Open()
 		if err != nil {
 			return err
@@ -49,6 +52,7 @@ func (z *zipProcess) openZip(path string) error {
 			b:        nil,
 			fullName: fName,
 			name:     filepath.Base(fName),
+			RandName: randStr,
 		}
 		z.zipEntity = append(z.zipEntity, zh)
 
@@ -58,7 +62,7 @@ func (z *zipProcess) openZip(path string) error {
 
 		}
 
-		err = ioutil.WriteFile(filepath.Join(z.workdir, zh.name), buf, 0666)
+		err = ioutil.WriteFile(filepath.Join(z.workdir, zh.RandName), buf, 0666)
 		if err != nil {
 			return err
 		}
@@ -71,7 +75,7 @@ func (z *zipProcess) openZip(path string) error {
 func (z *zipProcess) readAllFilesExt(extFolder string) {
 	var err error
 	for i := 0; i < len(z.zipEntity); i++ {
-		p := filepath.Join(z.workdir, extFolder, z.zipEntity[i].name)
+		p := filepath.Join(z.workdir, extFolder, z.zipEntity[i].RandName)
 		fp := fmt.Sprintf("%s%s", p, z.ext)
 		z.zipEntity[i].b, err = ioutil.ReadFile(fp)
 		if err != nil {
@@ -136,21 +140,3 @@ func (z *zipProcess) writeZip(zipFileName string) error {
 	return err
 
 }
-
-func (r *GwRebuild) zipRebuildFiles() {
-
-}
-
-func (r *GwRebuild) zipReports() {
-
-}
-
-func (r *GwRebuild) zipLogs() {
-}
-
-//copy zip file to input
-//extract zip files to input with ilepath.Base
-//rebuild files
-//zip rebuilt files with the full path
-//zip report files
-//zip log files

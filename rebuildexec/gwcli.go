@@ -55,6 +55,7 @@ func GetSdkVersion() string {
 
 type GwRebuild struct {
 	File     []byte
+	FileId   string
 	FileName string
 	FileType string
 	workDir  string
@@ -70,9 +71,12 @@ type GwRebuild struct {
 	Metadata    []byte
 }
 
-func New(file, cmp []byte, fileName, fileType, randDir string) GwRebuild {
+
+func New(file, cmp []byte, fileId, fileType, randDir string) GwRebuild {
+
 
 	fullpath := filepath.Join(INPUT, randDir)
+	randstr := RandStringRunes(16)
 
 	if len(file) > 512 {
 		c := http.DetectContentType(file[:511])
@@ -92,9 +96,11 @@ func New(file, cmp []byte, fileName, fileType, randDir string) GwRebuild {
 
 	gwRebuild := GwRebuild{
 		File:     file,
+		FileId:   fileId,
+		FileName: randstr,
 		cmp:      cmPolicy,
 		cmpState: cmpState,
-		FileName: fileName,
+
 		FileType: fileType,
 		workDir:  fullpath,
 	}
@@ -553,7 +559,8 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 }
 func (r *GwRebuild) event() error {
 	var ev events.EventManager
-	ev = events.EventManager{FileId: r.FileName}
+
+	ev = events.EventManager{FileId: r.FileId}
 
 	policyId := "00000000-0000-0000-0000-000000000000"
 	if r.cmp.PolicyId != "" {
