@@ -54,7 +54,7 @@ const (
 
 func TestCmp(t *testing.T) {
 
-	bjson, _ := ioutil.ReadFile("/home/ibrahim/legacy/gowork/icaptest/mq-demo/appsettings.json")
+	bjson := []byte(cmpJsonSample)
 
 	bjson = bytes.TrimPrefix(bjson, []byte("\xef\xbb\xbf"))
 	p, err := cmpJsonMarshal(bjson)
