@@ -72,7 +72,7 @@ type GwRebuild struct {
 }
 
 
-func New(file, cmp []byte, fileName, fileType, randDir string) GwRebuild {
+func New(file, cmp []byte, fileId, fileType, randDir string) GwRebuild {
 
 
 	fullpath := filepath.Join(INPUT, randDir)
