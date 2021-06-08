@@ -365,7 +365,7 @@ func TestRebuildZip(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	fd.YieldZip()
+	fd.Yield()
 
 	if fd.PrintStatus() != "CLEANED" {
 		t.Errorf("errors %s expected %s got %s", "RebuildZip", "CLEANED", fd.PrintStatus())

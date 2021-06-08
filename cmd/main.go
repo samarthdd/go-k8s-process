@@ -248,88 +248,40 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	processDir := "/tmp/glrebuild"
 
 	fd := rebuildexec.NewRebuild(f, fileid, fileTtype, randPath, processDir)
-	if fileTtype == "zip" {
-		err := fd.RebuildZipSetup()
-		if err != nil {
-			if JeagerStatus == true {
 
-				span.LogKV("Errror", err)
-			}
-			d["rebuild-processing-status"] = fd.PrintStatus()
+	err := fd.RebuildSetup()
+	if err != nil {
+		if JeagerStatus == true {
 
-			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
-
+			span.LogKV("Errror", err)
 		}
-		err = fd.Execute()
-		if err != nil {
-			if JeagerStatus == true {
 
-				span.LogKV("Errror", err)
-			}
-			d["rebuild-processing-status"] = fd.PrintStatus()
-
-			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
-
-		}
-		fd.YieldZip()
-
-	} else {
-		err := fd.RebuildSetup()
-		if err != nil {
-			if JeagerStatus == true {
-
-				span.LogKV("Errror", err)
-			}
-			d["rebuild-processing-status"] = fd.PrintStatus()
-
-			zlog.Error().Err(err).Msg("error failed to rebuild file")
-
-		}
-		err = fd.Execute()
-		if err != nil {
-			if JeagerStatus == true {
-
-				span.LogKV("Errror", err)
-			}
-			d["rebuild-processing-status"] = fd.PrintStatus()
-
-			zlog.Error().Err(err).Msg("error failed to rebuild zip file")
-
-		}
-		fd.Yield()
+		zlog.Error().Err(err).Msg("error failed to rebuild zip file")
 
 	}
-	if fd.PrintStatus() == "UNPROCESSABLE" && fd.LogFile == nil {
-		err := fd.CheckIfExpired()
-		if err != nil {
-			if JeagerStatus == true {
+	err = fd.Execute()
+	if err != nil {
+		if JeagerStatus == true {
 
-				span.LogKV("Errror", err)
-			}
-			d["rebuild-processing-status"] = fd.PrintStatus()
-
-			zlog.Error().Err(err).Msg("error failed to check file")
-
+			span.LogKV("Errror", err)
 		}
-		err = fd.Execute()
-		if err != nil {
-			if JeagerStatus == true {
 
-				span.LogKV("Errror", err)
-			}
-			d["rebuild-processing-status"] = fd.PrintStatus()
+		zlog.Error().Err(err).Msg("error failed to rebuild zip file")
 
-			zlog.Error().Err(err).Msg("error failed to check file")
-
-		}
 	}
+	fd.Yield()
+
+	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
+	d["rebuild-processing-status"] = fd.PrintStatus()
+	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 	if fd.PrintStatus() == rebuildexec.RebuildStatusInternalError {
+		err = fd.Clean()
+		if err != nil {
+			zlog.Error().Err(err).Msg("error rebuildexec Clean function : %s")
+
+		}
 		return
 	}
-	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
-
-	d["rebuild-processing-status"] = fd.PrintStatus()
-	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
 
 	zlog.Info().Msg("file rebuilt process  successfully ")
 
@@ -400,7 +352,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	}
 
-	err := fd.Clean()
+	err = fd.Clean()
 	if err != nil {
 		zlog.Error().Err(err).Msg("error rebuildexec Clean function : %s")
 

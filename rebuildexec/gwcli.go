@@ -84,6 +84,30 @@ func NewRebuild(file []byte, fileName, fileType, randDir, processDir string) GwR
 	return gwRebuild
 }
 
+func (r *GwRebuild) RebuildSetup() error {
+	var err error
+	if r.FileType == "zip" {
+		err = r.RebuildZipSetup()
+	} else {
+		err = r.RebuildFileSetup()
+	}
+	if err != nil {
+		return err
+
+	}
+	errExp := r.CheckForExpire()
+	if errExp != nil {
+		errExpired := r.CheckIfExpired()
+		if errExpired != nil {
+			r.statusMessage = RebuildStatusInternalError
+
+		}
+		return errExpired
+
+	}
+	return nil
+}
+
 func (r *GwRebuild) RebuildZipSetup() error {
 	r.event.RebuildStarted()
 
@@ -124,33 +148,12 @@ func (r *GwRebuild) RebuildZipSetup() error {
 	r.zipAll(zipProc, "")
 	r.zipAll(zipProc, ".xml")
 	r.zipAll(zipProc, ".log")
-	r.loadfFilesAfterProcess()
 
-	r.rebuildStatus()
 	return nil
 
 }
 
-func (r *GwRebuild) YieldZip() {
-
-	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
-	zipProc := zipProcess{
-		workdir:   filepath.Dir(path),
-		zipEntity: nil,
-		ext:       "",
-	}
-	r.zipAll(zipProc, "")
-	r.zipAll(zipProc, ".xml")
-	r.zipAll(zipProc, ".log")
-	r.loadfFilesAfterProcess()
-
-	r.rebuildStatus()
-	r.event.RebuildCompleted(gwoutcome(r.statusMessage))
-	r.StopRecordEvent()
-
-}
-
-func (r *GwRebuild) RebuildSetup() error {
+func (r *GwRebuild) RebuildFileSetup() error {
 	r.event.RebuildStarted()
 
 	err := setupDirs(r.workDir)
@@ -194,19 +197,16 @@ func (r *GwRebuild) copyTargetFile() error {
 }
 
 func (r *GwRebuild) CheckIfExpired() error {
-	r.FileType = "pdf"
-	r.args = fmt.Sprintf("%s fileType=%s", r.args, r.FileType)
+
+	r.args = fmt.Sprintf("%s fileType=%s", r.args, "pdf")
 
 	err := r.Execute()
 
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
 
 		return err
 	}
-	r.loadfFilesAfterProcess()
 
-	r.rebuildStatus()
 	return nil
 }
 
@@ -308,6 +308,23 @@ func (r *GwRebuild) Execute() error {
 
 	log.Printf("\033[32m %s", string(b))
 
+	return nil
+}
+
+func (r *GwRebuild) CheckForExpire() error {
+	ext := ".log"
+	if r.FileType == "zip" {
+		ext = "log"
+	}
+
+	pathManaged := fmt.Sprintf("%s/%s/%s/%s%s", r.workDir, REBUILDOUTPUT, MANAGED, r.FileName, ext)
+	pathNonconforming := fmt.Sprintf("%s/%s/%s/%s%s", r.workDir, REBUILDOUTPUT, NONCONFORMING, r.FileName, ext)
+
+	if _, err := os.Stat(pathManaged); os.IsNotExist(err) {
+		if _, err := os.Stat(pathNonconforming); os.IsNotExist(err) {
+			return err
+		}
+	}
 	return nil
 }
 
