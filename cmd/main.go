@@ -108,23 +108,19 @@ func main() {
 	go func() {
 		for d := range msgs {
 
-			if JeagerStatus == true {
-				tracer, closer := tracing.Init("process")
-				defer closer.Close()
-				opentracing.SetGlobalTracer(tracer)
-				ProcessTracer = tracer
-			}
-			zlog.Info().Msg("received message from queue ")
+			dh := d
+			go func() {
+				zlog.Info().Msg("received message from queue ")
 
-			err := ProcessMessage(d.Headers)
-			if err != nil {
-				processend(err)
-				zlog.Error().Err(err).Msg("error Failed to process message")
-			}
+				err := ProcessMessage(dh.Headers)
+				if err != nil {
+					processend(err)
+					zlog.Error().Err(err).Msg("error Failed to process message")
+				}
 
-			// Closing the channel to exit
-			zlog.Info().Msg(" closing the channel")
-			close(forever)
+				// Closing the channel to exit
+				zlog.Info().Msg(" closing the channel")
+			}()
 		}
 	}()
 
@@ -145,6 +141,12 @@ func processend(err error) {
 
 func ProcessMessage(d amqp.Table) error {
 	if JeagerStatus == true {
+		if JeagerStatus == true {
+			tracer, closer := tracing.Init("process")
+			defer closer.Close()
+			opentracing.SetGlobalTracer(tracer)
+			ProcessTracer = tracer
+		}
 
 		if d["uber-trace-id"] != nil {
 
@@ -167,12 +169,13 @@ func ProcessMessage(d amqp.Table) error {
 				helloTo = d["file-id"].(string)
 
 			}
-			sp.SetTag("msg-procces", helloTo)
+			sp.SetTag("file-id", helloTo)
 			defer sp.Finish()
-			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
 			defer cancel()
 			// Update the context with the span for the subsequent reference.
 			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+			zlog.Info().Msg("file downloaded from minio successfully")
 
 		} else {
 			if d["file-id"] == nil {
@@ -182,7 +185,7 @@ func ProcessMessage(d amqp.Table) error {
 
 			}
 			span := ProcessTracer.StartSpan("go-k8s-process")
-			span.SetTag("msg-procces", helloTo)
+			span.SetTag("file-id", helloTo)
 			defer span.Finish()
 
 			ctx = opentracing.ContextWithSpan(context.Background(), span)
@@ -245,9 +248,16 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 		fileTtype = "zip"
 	}
 
-	processDir := "/tmp/glrebuild"
+	if JeagerStatus == true {
+		span, _ := opentracing.StartSpanFromContext(ctx, "rebuild")
+		defer span.Finish()
+		span.LogKV("file-id", fileid)
+	}
 
-	fd := rebuildexec.NewRebuild(f, fileid, fileTtype, randPath, processDir)
+	processDir := "/tmp/glrebuild"
+	cmp, _ := d["content-managment-policy"].([]byte)
+
+	fd := rebuildexec.NewRebuild(f, cmp, fileid, fileTtype, randPath, processDir)
 
 	err := fd.RebuildSetup()
 	if err != nil {
@@ -263,16 +273,18 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	if err != nil {
 		if JeagerStatus == true {
 
-			span.LogKV("Errror", err)
+			span.LogKV("error", err)
 		}
-
-		zlog.Error().Err(err).Msg("error failed to rebuild zip file")
+		zlog.Error().Err(err).Msg("error failed to rebuild file")
 
 	}
 	fd.Yield()
 
+	status := fd.PrintStatus()
+	d["rebuild-processing-status"] = status
 	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
-	d["rebuild-processing-status"] = fd.PrintStatus()
+	d["file-outcome"] = rebuildexec.Gwoutcome(status)
+
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 	if fd.PrintStatus() == rebuildexec.RebuildStatusInternalError {
 		err = fd.Clean()
@@ -293,12 +305,12 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	if generateReport == "true" {
 		report := fd.ReportFile
 		if report == nil {
-			zlog.Error().Msg("error rebuildexec fileRreport function")
+			zlog.Error().Msg("error report file  not found ")
 
 		} else {
-			fileExt := ".xml"
+			fileExt := "report.xml"
 			if fd.FileType == "zip" {
-				fileExt = "xml"
+				fileExt = "report.xml.zip"
 			}
 
 			minioUploadProcess(report, fileid, fileExt, "report-presigned-url", d)
@@ -309,20 +321,23 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	file := fd.RebuiltFile
 
 	if file == nil {
-		zlog.Error().Msg("error rebuildexec FileProcessed function")
+		zlog.Error().Msg("error rebuilt file not found")
 
 	} else {
-		minioUploadProcess(file, "rebuild-", fileid, "clean-presigned-url", d)
-
+		fileExt := "rebuilt"
+		if fd.FileType == "zip" {
+			fileExt = "rebuilt.zip"
+		}
+		minioUploadProcess(file, fileid, fileExt, "clean-presigned-url", d)
 	}
 
 	gwlogFile := fd.GwLogFile
 	if gwlogFile == nil {
 
-		zlog.Error().Msg("error rebuildexec GwFileLog function")
+		zlog.Error().Msg("error  GwFileLog file not found")
 
 	} else {
-		minioUploadProcess(gwlogFile, fileid, ".gw.log", "gwlog-presigned-url", d)
+		minioUploadProcess(gwlogFile, fileid, "gw.log", "gwlog-presigned-url", d)
 
 	}
 
@@ -330,12 +345,12 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	if logFile == nil {
 
-		zlog.Error().Msg("error rebuildexec FileLog function")
+		zlog.Error().Msg("error  log file not found ")
 
 	} else {
-		fileExt := ".log"
+		fileExt := "log"
 		if fd.FileType == "zip" {
-			fileExt = "log"
+			fileExt = "log.zip"
 		}
 
 		minioUploadProcess(logFile, fileid, fileExt, "log-presigned-url", d)
@@ -345,10 +360,10 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	metaDataFile := fd.Metadata
 	if metaDataFile == nil {
 
-		zlog.Error().Msg("error rebuildexec metadata function")
+		zlog.Error().Msg("error  metadata function")
 
 	} else {
-		minioUploadProcess(metaDataFile, fileid, ".metadata.json", "metadata-presigned-url", d)
+		minioUploadProcess(metaDataFile, fileid, "metadata.json", "metadata-presigned-url", d)
 
 	}
 
@@ -416,7 +431,7 @@ func uploadMinio(file []byte, filename string) (string, error) {
 
 func minioUploadProcess(file []byte, baseName, extName, headername string, d amqp.Table) {
 
-	minioFileId := fmt.Sprintf("%s%s", baseName, extName)
+	minioFileId := fmt.Sprintf("%s/%s", baseName, extName)
 
 	urlr, err := uploadMinio(file, minioFileId)
 	if err != nil {
@@ -436,7 +451,7 @@ func tracest(msg string) {
 	opentracing.SetGlobalTracer(tracer)
 	helloTo = msg
 	span := tracer.StartSpan("process file")
-	span.SetTag("msg-procces", helloTo)
+	span.SetTag("file-id", helloTo)
 	defer span.Finish()
 
 	ctx = opentracing.ContextWithSpan(context.Background(), span)

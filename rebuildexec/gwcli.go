@@ -3,7 +3,6 @@ package rebuildexec
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -47,12 +46,17 @@ func init() {
 type GwRebuild struct {
 	File     []byte
 	FileName string
+	FileId   string
 	FileType string
 	workDir  string
+
+	cmp      policy
+	cmpState bool
 
 	statusMessage string
 	args          string
 	event         events.EventManager
+	zipProc       zipProcess
 	RebuiltFile   []byte
 	ReportFile    []byte
 	LogFile       []byte
@@ -60,24 +64,40 @@ type GwRebuild struct {
 	Metadata      []byte
 }
 
-func NewRebuild(file []byte, fileName, fileType, randDir, processDir string) GwRebuild {
+func NewRebuild(file, cmp []byte, fileId, fileType, randDir, processDir string) GwRebuild {
 
 	fullpath := filepath.Join(processDir, randDir)
+	randstr := RandStringRunes(16)
+
 	ftype := GetContentType(file)
 
 	if ftype == "zip" {
 		fileType = "zip"
 	}
 
-	gwRebuild := GwRebuild{
-		File:     file,
-		FileName: fileName,
-		FileType: fileType,
-		workDir:  fullpath,
-		event:    events.EventManager{FileId: fileName},
+	cmpState := false
+	cmPolicy := policy{}
+	if len(cmp) > 0 {
+		cmpState = true
+		cmPolicy, _ = cmpJsonMarshal(cmp)
+
 	}
 
-	gwRebuild.event.NewDocument("00000000-0000-0000-0000-000000000000")
+	gwRebuild := GwRebuild{
+		File:     file,
+		FileId:   fileId,
+		FileName: randstr,
+		cmp:      cmPolicy,
+		cmpState: cmpState,
+		FileType: fileType,
+		workDir:  fullpath,
+		event:    events.EventManager{FileId: fileId},
+	}
+
+	if gwRebuild.cmp.PolicyId == "" {
+		gwRebuild.cmp.PolicyId = "00000000-0000-0000-0000-000000000000"
+	}
+	gwRebuild.event.NewDocument(gwRebuild.cmp.PolicyId)
 
 	gwRebuild.event.FileTypeDetected(fileType)
 
@@ -95,16 +115,7 @@ func (r *GwRebuild) RebuildSetup() error {
 		return err
 
 	}
-	errExp := r.CheckForExpire()
-	if errExp != nil {
-		errExpired := r.CheckIfExpired()
-		if errExpired != nil {
-			r.statusMessage = RebuildStatusInternalError
 
-		}
-		return errExpired
-
-	}
 	return nil
 }
 
@@ -126,12 +137,12 @@ func (r *GwRebuild) RebuildZipSetup() error {
 	}
 
 	path := fmt.Sprintf("%s/%s/%s", r.workDir, REBUILDINPUT, r.FileName)
-	zipProc := zipProcess{
+	r.zipProc = zipProcess{
 		workdir:   filepath.Dir(path),
 		zipEntity: nil,
 		ext:       "",
 	}
-	err = r.extractZip(&zipProc)
+	err = r.extractZip()
 	if err != nil {
 		r.statusMessage = RebuildStatusInternalError
 
@@ -144,10 +155,6 @@ func (r *GwRebuild) RebuildZipSetup() error {
 
 		return err
 	}
-
-	r.zipAll(zipProc, "")
-	r.zipAll(zipProc, ".xml")
-	r.zipAll(zipProc, ".log")
 
 	return nil
 
@@ -182,10 +189,22 @@ func (r *GwRebuild) RebuildFileSetup() error {
 
 func (r *GwRebuild) Yield() {
 
+	if r.FileType == "zip" {
+		r.zipAll("")
+		r.zipAll(".xml")
+		r.zipAll(".log")
+	}
+	errExp := r.CheckForExpire()
+	if errExp != nil {
+		r.FileType = "pdf"
+		r.CheckIfExpired()
+
+	}
+
 	r.loadfFilesAfterProcess()
 
 	r.rebuildStatus()
-	r.event.RebuildCompleted(gwoutcome(r.statusMessage))
+	r.event.RebuildCompleted(Gwoutcome(r.statusMessage))
 	r.StopRecordEvent()
 }
 
@@ -254,12 +273,20 @@ func (r *GwRebuild) exe() error {
 		return err
 	}
 
-	cmd = exec.Command("cp", xmlconfig, randXmlconfig)
-	err = cmd.Run()
-	if err != nil {
-		return err
-	}
+	if r.cmpState {
+		xmlCmp, _ := r.cmp.cmpXmlconv()
 
+		errWrite := ioutil.WriteFile(randXmlconfig, xmlCmp, 0777)
+		if errWrite != nil {
+			return errWrite
+		}
+	} else {
+		cmd = exec.Command("cp", xmlconfig, randXmlconfig)
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+	}
 	cfg, err := ini.Load(randConfigini)
 	if err != nil {
 		return fmt.Errorf("fail to read ini file  %s", err)
@@ -299,14 +326,12 @@ func (r *GwRebuild) exe() error {
 
 func (r *GwRebuild) Execute() error {
 
-	b, err := gwCliExec(r.args)
+	_, err := gwCliExec(r.args)
 	if err != nil {
 		r.statusMessage = RebuildStatusInternalError
 
 		return err
 	}
-
-	log.Printf("\033[32m %s", string(b))
 
 	return nil
 }
@@ -381,57 +406,34 @@ func (r *GwRebuild) retrieveGwFile(fileNameExt string) ([]byte, error) {
 
 }
 
-func (r *GwRebuild) extractZip(z *zipProcess) error {
-	err := z.openZip(r.FileName)
+func (r *GwRebuild) extractZip() error {
+	err := r.zipProc.openZip(r.FileName)
 	if err != nil {
 		return err
 	}
 
-	os.Remove(filepath.Join(z.workdir, r.FileName))
+	os.Remove(filepath.Join(r.zipProc.workdir, r.FileName))
 
 	return nil
 }
 
-func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
+func (r GwRebuild) zipAll(ext string) error {
 	path := fmt.Sprintf("%s/%s", r.workDir, REBUILDOUTPUT)
 
-	z.ext = ext
-	z.workdir = path
-	z.readAllFilesExt(NONCONFORMING)
-	z.readAllFilesExt(MANAGED)
+	r.zipProc.ext = ext
+	r.zipProc.workdir = path
+	r.zipProc.readAllFilesExt(NONCONFORMING)
+	r.zipProc.readAllFilesExt(MANAGED)
 
 	if len(ext) > 1 {
 		ext = ext[1:]
 	}
 
 	outName := fmt.Sprintf("%s%s", r.FileName, ext)
-	z.workdir = filepath.Join(path, MANAGED)
-	err := z.writeZip(outName)
+	r.zipProc.workdir = filepath.Join(path, MANAGED)
+	err := r.zipProc.writeZip(outName)
 
 	return err
-}
-
-func (r *GwRebuild) Event() error {
-	ev := events.EventManager{FileId: r.FileName}
-	ev.NewDocument("00000000-0000-0000-0000-000000000000")
-
-	if r.statusMessage != RebuildStatusInternalError && r.statusMessage != RebuildStatusExpired {
-
-		fileType := GetContentType(r.File)
-
-		ev.FileTypeDetected(fileType)
-		gwoutcome := gwoutcome(r.statusMessage)
-
-		ev.RebuildStarted()
-		ev.RebuildCompleted(gwoutcome)
-	}
-	b, err := r.event.MarshalJson()
-	if err != nil {
-
-		return err
-	}
-	r.Metadata = b
-	return nil
 }
 
 func (r *GwRebuild) StopRecordEvent() error {
@@ -465,7 +467,7 @@ func setupDirs(workDir string) error {
 	return nil
 }
 
-func gwoutcome(status string) string {
+func Gwoutcome(status string) string {
 	switch status {
 
 	case RebuildStatusCleaned, RebuildStatusClean:

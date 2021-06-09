@@ -2,7 +2,6 @@ package rebuildexec
 
 import (
 	"fmt"
-	"log"
 	"strings"
 )
 
@@ -12,8 +11,7 @@ func parseCode(s string) string {
 	if len(s) < len(str) {
 		return ""
 	}
-	d := s[:len(str)]
-	log.Println(d)
+
 	if s[:len(str)] != str {
 		return ""
 	}

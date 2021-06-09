@@ -219,7 +219,7 @@ func TestRebuild(t *testing.T) {
 		{"sample.jpg", RebuildStatusCleaned},
 		{"sample.doc", RebuildStatusClean},
 		{"unprocessable.jpg", RebuildStatusUnprocessable},
-		{"nested.zip", RebuildStatusUnprocessable},
+		{"nested.zip", RebuildStatusCleaned},
 	}
 
 	path := filepath.Join(mainProjectPath, depDirTemp)
@@ -230,7 +230,7 @@ func TestRebuild(t *testing.T) {
 		}
 
 		randPath := RandStringRunes(16)
-		fd := NewRebuild(f, files[i].Name, "*", randPath, processDir)
+		fd := NewRebuild(f, nil, files[i].Name, "*", randPath, processDir)
 		err = fd.RebuildSetup()
 		if err != nil {
 			t.Error(err)
@@ -263,7 +263,7 @@ func TestRebuild(t *testing.T) {
 			t.Error("metadata  file not found")
 
 		}
-		fd.Clean()
+		//	fd.Clean()
 
 	}
 
@@ -291,30 +291,6 @@ func TestCliExitStatus(t *testing.T) {
 		}
 
 	}
-}
-
-func TestRebuildFileInternalError(t *testing.T) {
-	os.Setenv("GWCLI", "NONVALIDPATH")
-	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
-
-	f, _ := ioutil.ReadFile(filepath.Join(mainProjectPath, depDirTemp, "sample.pdf"))
-	randPath := RandStringRunes(16)
-	fd := NewRebuild(f, "samplee.pdf", "*", randPath, processDir)
-	err := fd.RebuildSetup()
-
-	if err != nil {
-		t.Error(err)
-
-	}
-	err = fd.Execute()
-	if err == nil {
-		t.Errorf("expected CLI error with exit code 1 ")
-	}
-	if fd.PrintStatus() != RebuildStatusInternalError {
-		t.Errorf("error expected %s got %s ", RebuildStatusInternalError, fd.PrintStatus())
-
-	}
-
 }
 
 func changeIniconfigToValidPath(path string) {
@@ -353,8 +329,8 @@ func TestRebuildZip(t *testing.T) {
 	f, _ := ioutil.ReadFile(zipPath)
 	randPath := RandStringRunes(16)
 
-	fd := NewRebuild(f, "nested.zip", "zip", randPath, processDir)
-	err := fd.RebuildZipSetup()
+	fd := NewRebuild(f, nil, "nested.zip", "zip", randPath, processDir)
+	err := fd.RebuildSetup()
 
 	if err != nil {
 		t.Error(err)
@@ -372,4 +348,38 @@ func TestRebuildZip(t *testing.T) {
 
 	}
 	fd.Clean()
+}
+
+func TestRebuildFileInternalError(t *testing.T) {
+	os.Setenv("GWCLI", "NONVALIDPATH")
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
+
+	f, _ := ioutil.ReadFile(filepath.Join(mainProjectPath, depDirTemp, "sample.pdf"))
+	randPath := RandStringRunes(16)
+	fd := NewRebuild(f, nil, "samplee.pdf", "*", randPath, processDir)
+	err := fd.RebuildSetup()
+
+	if err != nil {
+		t.Error(err)
+
+	}
+	err = fd.Execute()
+	if err == nil {
+		t.Errorf("expected CLI error with exit code 1 ")
+	}
+	if fd.PrintStatus() != RebuildStatusInternalError {
+		t.Errorf("error expected %s got %s ", RebuildStatusInternalError, fd.PrintStatus())
+
+	}
+	t.Cleanup(func() {
+		os.Setenv("GWCLI", filepath.Join(mainProjectPath, CliTemp))
+
+	})
+}
+
+func TestClean(t *testing.T) {
+	t.Cleanup(func() {
+		path := filepath.Join(mainProjectPath, "tmp")
+		os.RemoveAll(path)
+	})
 }

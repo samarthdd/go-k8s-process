@@ -19,6 +19,7 @@ type ziphelper struct {
 	b        []byte
 	fullName string
 	name     string
+	RandName string
 }
 
 func (z *zipProcess) openZip(path string) error {
@@ -31,7 +32,11 @@ func (z *zipProcess) openZip(path string) error {
 
 	defer r.Close()
 
+	// Iterate through the files in the archive,
+	// printing some of their contents.
 	for _, f := range r.File {
+		randStr := RandStringRunes(16)
+
 		rc, err := f.Open()
 		if err != nil {
 			return err
@@ -46,6 +51,7 @@ func (z *zipProcess) openZip(path string) error {
 			b:        nil,
 			fullName: fName,
 			name:     filepath.Base(fName),
+			RandName: randStr,
 		}
 		z.zipEntity = append(z.zipEntity, zh)
 
@@ -55,7 +61,7 @@ func (z *zipProcess) openZip(path string) error {
 
 		}
 
-		err = ioutil.WriteFile(filepath.Join(z.workdir, zh.name), buf, 0666)
+		err = ioutil.WriteFile(filepath.Join(z.workdir, zh.RandName), buf, 0666)
 		if err != nil {
 			return err
 		}
@@ -67,7 +73,7 @@ func (z *zipProcess) openZip(path string) error {
 
 func (z *zipProcess) readAllFilesExt(extFolder string) {
 	for i := 0; i < len(z.zipEntity); i++ {
-		p := filepath.Join(z.workdir, extFolder, z.zipEntity[i].name)
+		p := filepath.Join(z.workdir, extFolder, z.zipEntity[i].RandName)
 		fp := fmt.Sprintf("%s%s", p, z.ext)
 		z.zipEntity[i].b, _ = ioutil.ReadFile(fp)
 
@@ -81,7 +87,10 @@ func (z *zipProcess) writeZip(zipFileName string) error {
 	ext := z.ext
 	buf := new(bytes.Buffer)
 
+	// Create a new zip archive.
 	w := zip.NewWriter(buf)
+
+	// Add some files to the archive.
 
 	for _, zh := range z.zipEntity {
 		if zh.b == nil {
@@ -115,7 +124,7 @@ func (z *zipProcess) writeZip(zipFileName string) error {
 	}
 
 	if empty {
-		return fmt.Errorf("there is no files to compress")
+		return fmt.Errorf("there is no log files ")
 	}
 
 	b, err := ioutil.ReadAll(buf)
