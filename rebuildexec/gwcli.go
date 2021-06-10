@@ -1,7 +1,6 @@
 package rebuildexec
 
 import (
-
 	"archive/zip"
 	"bytes"
 	"fmt"
@@ -84,7 +83,7 @@ func NewRebuild(file, cmp []byte, fileId, fileType, randDir, processDir string) 
 		cmpState = true
 		cmPolicy, err = cmpJsonMarshal(cmp)
 		zlog.Error().Err(err).Msg("error processing content management json file")
-  }
+	}
 	if len(file) > 512 {
 		c := http.DetectContentType(file[:511])
 
@@ -92,7 +91,7 @@ func NewRebuild(file, cmp []byte, fileId, fileType, randDir, processDir string) 
 			offic, err := DiffZipOffic(file)
 			zlog.Error().Err(err).Msg("error DffZipOffic func ")
 			if offic == "office" {
-        ftype="office"
+				ftype = "office"
 				fileType = "*"
 			} else {
 				fileType = "zip"

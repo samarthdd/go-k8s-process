@@ -357,7 +357,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	}
 
 	processDir := "/tmp/glrebuild"
-	cmp, _ := d["content-managment-policy"].([]byte)
+	cmp, _ := d["content-management-policy"].([]byte)
 
 	fd := rebuildexec.NewRebuild(f, cmp, fileid, fileTtype, randPath, processDir)
 
