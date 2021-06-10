@@ -45,8 +45,8 @@ func init() {
 
 type GwRebuild struct {
 	File     []byte
-	FileName string
 	FileId   string
+	FileName string
 	FileType string
 	workDir  string
 
@@ -456,6 +456,7 @@ func Gwoutcome(status string) string {
 	switch status {
 
 	case RebuildStatusCleaned, RebuildStatusClean:
+
 		return "replace"
 	case RebuildStatusUnprocessable:
 		return "unmodified"
