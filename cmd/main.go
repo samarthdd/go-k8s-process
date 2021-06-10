@@ -346,9 +346,6 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	randPath := rebuildexec.RandStringRunes(16)
 	fileTtype := "*" // wild card
-	if rebuildexec.GetContentType(f) == "zip" {
-		fileTtype = "zip"
-	}
 
 	if JeagerStatus == true {
 		span, _ := opentracing.StartSpanFromContext(ctx, "rebuild")
