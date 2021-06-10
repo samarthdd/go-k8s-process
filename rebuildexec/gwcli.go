@@ -1,6 +1,9 @@
 package rebuildexec
 
 import (
+
+	"archive/zip"
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -81,6 +84,22 @@ func NewRebuild(file, cmp []byte, fileId, fileType, randDir, processDir string) 
 		cmpState = true
 		cmPolicy, err = cmpJsonMarshal(cmp)
 		zlog.Error().Err(err).Msg("error processing content management json file")
+  }
+	if len(file) > 512 {
+		c := http.DetectContentType(file[:511])
+
+		if c == "application/zip" {
+			offic, err := DiffZipOffic(file)
+			zlog.Error().Err(err).Msg("error DffZipOffic func ")
+			if offic == "office" {
+        ftype="office"
+				fileType = "*"
+			} else {
+				fileType = "zip"
+
+			}
+
+		}
 
 	}
 
@@ -488,4 +507,22 @@ func parseContnetType(s string) string {
 		return sl[1]
 	}
 	return s
+}
+func DiffZipOffic(file []byte) (string, error) {
+	var office string = ""
+
+	r, err := zip.NewReader(bytes.NewReader(file), int64(len(file)))
+	if err != nil {
+		return "", err
+	}
+
+	for _, f := range r.File {
+
+		if f.Name == "_rels/.rels" {
+			office = "office"
+			break
+		}
+	}
+	return office, nil
+
 }
