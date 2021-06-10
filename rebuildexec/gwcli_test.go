@@ -350,6 +350,44 @@ func TestRebuildZip(t *testing.T) {
 	fd.Clean()
 }
 
+func TestContentManagmentPolicy(t *testing.T) {
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
+
+	Path := filepath.Join(mainProjectPath, depDirTemp, "sample.pdf")
+
+	f, _ := ioutil.ReadFile(Path)
+
+	cmpPath := filepath.Join(mainProjectPath, depDirTemp, "cmp.json")
+	cmp, _ := ioutil.ReadFile(cmpPath)
+	cmp = bytes.TrimPrefix(cmp, []byte("\xef\xbb\xbf"))
+
+	randPath := RandStringRunes(16)
+
+	fd := NewRebuild(f, cmp, "sample.pdf", "*", randPath, processDir)
+	err := fd.RebuildSetup()
+
+	if err != nil {
+		t.Error(err)
+
+	}
+
+	err = fd.Execute()
+	if err != nil {
+		t.Error(err)
+	}
+	fd.Yield()
+
+	if fd.PrintStatus() != "CLEAN" {
+		t.Errorf("errors %s expected %s got %s", "TestContentManagmentPolicy", "CLEANED", fd.PrintStatus())
+
+	}
+	if fd.cmp.PolicyId != "1c47fecd-be3c-48c8-9e8d-ee4abc7eafef" {
+		t.Errorf("errors %s expected %s got %s", "TestContentManagmentPolicy", "1c47fecd-be3c-48c8-9e8d-ee4abc7eafef", fd.cmp.PolicyId)
+
+	}
+	fd.Clean()
+}
+
 func TestRebuildFileInternalError(t *testing.T) {
 	os.Setenv("GWCLI", "NONVALIDPATH")
 	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
@@ -375,6 +413,115 @@ func TestRebuildFileInternalError(t *testing.T) {
 		os.Setenv("GWCLI", filepath.Join(mainProjectPath, CliTemp))
 
 	})
+}
+func TestExpired(t *testing.T) {
+	currentTag, err := getCurrentGitTag()
+	if err != nil {
+		t.Error(err)
+
+	}
+	if len(currentTag) > 1 {
+		currentTag = currentTag[:len(currentTag)-1]
+	}
+	err = checkoutTag("1.191")
+	if err != nil {
+		t.Error(err)
+
+	}
+	errSetup := setupExpireLibrary()
+	if errSetup != nil {
+		t.Error(errSetup)
+
+	}
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
+
+	Path := filepath.Join(mainProjectPath, depDirTemp, "sample.pdf")
+
+	f, _ := ioutil.ReadFile(Path)
+	randPath := RandStringRunes(16)
+
+	fd := NewRebuild(f, nil, "sample.pdf", "*", randPath, processDir)
+	err = fd.RebuildSetup()
+
+	if err != nil {
+		t.Error(err)
+
+	}
+
+	err = fd.Execute()
+	if err != nil {
+		t.Error(err)
+	}
+	fd.Yield()
+
+	if fd.PrintStatus() != RebuildStatusExpired {
+		t.Errorf("errors %s expected %s got %s", "TestExpired", RebuildStatusExpired, fd.PrintStatus())
+
+	}
+	fd.Clean()
+	t.Cleanup(func() {
+		checkoutTag(currentTag)
+		os.Setenv("LD_LIBRARY_PATH", filepath.Join(mainProjectPath, depDirTemp))
+		os.Setenv("GWCLI", filepath.Join(mainProjectPath, "tmp", "expire-cli-path", "glasswallCLI"))
+	})
+
+}
+func setupExpireLibrary() error {
+
+	os.MkdirAll(filepath.Join(mainProjectPath, "tmp", "expire-cli-path"), 0777)
+
+	expireCliPath := filepath.Join(mainProjectPath, "tmp", "expire-cli-path", "glasswallCLI")
+	expireSoPath := filepath.Join(mainProjectPath, "tmp", "expire-cli-path", "libglasswall.classic.so")
+	GwCliPath1191 := filepath.Join(mainProjectPath, GwCliPath)
+	GwEnginePath1991 := filepath.Join(mainProjectPath, GwEnginePath)
+	cmd := exec.Command("cp", GwCliPath1191, expireCliPath)
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	cmd = exec.Command("cp", GwEnginePath1991, expireSoPath)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	err = os.Chmod(expireCliPath, 0777)
+	if err != nil {
+		return err
+	}
+	os.Setenv("LD_LIBRARY_PATH", filepath.Join(mainProjectPath, "tmp", "expire-cli-path"))
+	os.Setenv("GWCLI", expireCliPath)
+
+	return nil
+}
+
+func checkoutTag(tag string) error {
+
+	absouluteEngine := filepath.Join(mainProjectPath, "sdk-rebuild-eval")
+
+	cmd := exec.Command("git", "checkout", tag)
+	cmd.Dir = absouluteEngine
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func getCurrentGitTag() (string, error) {
+
+	absouluteEngine := filepath.Join(mainProjectPath, "sdk-rebuild-eval")
+
+	var buf bytes.Buffer
+
+	cmd := exec.Command("git", "describe", "--tags")
+	cmd.Stdout = &buf
+	cmd.Dir = absouluteEngine
+	err := cmd.Run()
+	if err != nil {
+		log.Println(buf.String())
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func TestClean(t *testing.T) {

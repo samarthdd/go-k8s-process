@@ -33,3 +33,10 @@ SUCCESS
 		}
 	}
 }
+
+func TestGetVersion(t *testing.T) {
+	s := GetVersion()
+	if s == "" {
+		t.Error("expecting version number got empty string")
+	}
+}

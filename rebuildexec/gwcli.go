@@ -65,7 +65,7 @@ type GwRebuild struct {
 }
 
 func NewRebuild(file, cmp []byte, fileId, fileType, randDir, processDir string) GwRebuild {
-
+	var err error
 	fullpath := filepath.Join(processDir, randDir)
 	randstr := RandStringRunes(16)
 
@@ -79,19 +79,21 @@ func NewRebuild(file, cmp []byte, fileId, fileType, randDir, processDir string) 
 	cmPolicy := policy{}
 	if len(cmp) > 0 {
 		cmpState = true
-		cmPolicy, _ = cmpJsonMarshal(cmp)
+		cmPolicy, err = cmpJsonMarshal(cmp)
+		zlog.Error().Err(err).Msg("error processing content management json file")
 
 	}
 
 	gwRebuild := GwRebuild{
-		File:     file,
-		FileId:   fileId,
-		FileName: randstr,
-		cmp:      cmPolicy,
-		cmpState: cmpState,
-		FileType: fileType,
-		workDir:  fullpath,
-		event:    events.EventManager{FileId: fileId},
+		File:          file,
+		FileId:        fileId,
+		FileName:      randstr,
+		cmp:           cmPolicy,
+		cmpState:      cmpState,
+		FileType:      fileType,
+		workDir:       fullpath,
+		statusMessage: RebuildStatusInternalError,
+		event:         events.EventManager{FileId: fileId},
 	}
 
 	if gwRebuild.cmp.PolicyId == "" {
@@ -124,15 +126,11 @@ func (r *GwRebuild) RebuildZipSetup() error {
 
 	err := setupDirs(r.workDir)
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
-
 		return err
 	}
 
 	err = r.copyTargetFile()
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
-
 		return err
 	}
 
@@ -144,15 +142,11 @@ func (r *GwRebuild) RebuildZipSetup() error {
 	}
 	err = r.extractZip()
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
-
 		return err
 	}
 
 	err = r.exe()
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
-
 		return err
 	}
 
@@ -165,22 +159,16 @@ func (r *GwRebuild) RebuildFileSetup() error {
 
 	err := setupDirs(r.workDir)
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
-
 		return err
 	}
 
 	err = r.copyTargetFile()
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
-
 		return err
 	}
 	err = r.exe()
 
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
-
 		return err
 	}
 
@@ -325,11 +313,8 @@ func (r *GwRebuild) exe() error {
 }
 
 func (r *GwRebuild) Execute() error {
-
 	_, err := gwCliExec(r.args)
 	if err != nil {
-		r.statusMessage = RebuildStatusInternalError
-
 		return err
 	}
 
@@ -379,7 +364,7 @@ func (r *GwRebuild) gwFileLog() ([]byte, error) {
 
 	b, err := ioutil.ReadFile(fileLog)
 	if err != nil {
-		return nil, fmt.Errorf("glasswallCLIProcess.log fileLog file not found")
+		return nil, fmt.Errorf("glasswallCLIProcess.log  file not found")
 	}
 	return b, nil
 
