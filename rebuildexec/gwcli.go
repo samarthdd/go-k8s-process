@@ -101,7 +101,7 @@ func NewRebuild(file, cmp []byte, fileId, fileType, randDir, processDir string) 
 	}
 	gwRebuild.event.NewDocument(gwRebuild.cmp.PolicyId)
 
-	gwRebuild.event.FileTypeDetected(fileType)
+	gwRebuild.event.FileTypeDetected(ftype)
 
 	return gwRebuild
 }
@@ -192,6 +192,11 @@ func (r *GwRebuild) Yield() {
 	r.loadfFilesAfterProcess()
 
 	r.rebuildStatus()
+	r.event.RebuildCompleted(Gwoutcome(r.statusMessage))
+	r.StopRecordEvent()
+}
+
+func (r *GwRebuild) StopRecordEventWithError() {
 	r.event.RebuildCompleted(Gwoutcome(r.statusMessage))
 	r.StopRecordEvent()
 }
@@ -468,10 +473,13 @@ func Gwoutcome(status string) string {
 
 func GetContentType(b []byte) string {
 	if len(b) < 512 {
-		return ""
+		return "UNKNOWN"
 	}
-	c := http.DetectContentType(b[:511])
-	return parseContnetType(c)
+	c := parseContnetType(http.DetectContentType(b[:511]))
+	if c == "" {
+		c = "UNKNOWN"
+	}
+	return c
 }
 
 func parseContnetType(s string) string {

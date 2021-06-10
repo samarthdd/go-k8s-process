@@ -36,17 +36,6 @@ type XmlConfig struct {
 	ExcelContentManagement      Excelcontentmanagement      `xml:"xlsConfig"`
 }
 
-/*
-
-type XmlConfig struct {
-	XMLName                     xml.Name                    `xml:"config"`
-	PdfContentManagement        Pdfcontentmanagement        `xml:"pdfConfig"`
-	WordContentManagement       Wordcontentmanagement       `xml:"wordConfig"`
-	PowerPointContentManagement Powerpointcontentmanagement `xml:"pptConfig"`
-	ExcelContentManagement      Excelcontentmanagement      `xml:"xlsConfig"`
-}
-*/
-
 type Pdfcontentmanagement struct {
 	Watermark          json.Number `json:"-" xml:"watermark,omitempty"`
 	Metadata           json.Number `json:"Metadata" xml:"metadata"`
@@ -233,16 +222,3 @@ func cmpStrToNum(v json.Number) json.Number {
 	}
 	return ""
 }
-
-/*
-0: Allow the content
-
-1: Sanitise (Default) the content
-
-2: Disallow the content
-
-
-<xs:enumeration value="sanitise"/>
-<xs:enumeration value="allow"/>
-<xs:enumeration value="disallow"/>
-*/

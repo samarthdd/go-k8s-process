@@ -367,6 +367,7 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 		d["rebuild-processing-status"] = status
 		d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
 		d["file-outcome"] = rebuildexec.Gwoutcome(status)
+		log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 
 	}()
 
@@ -377,9 +378,9 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			span.LogKV("error", err)
 		}
-
+		fd.StopRecordEventWithError()
 		zlog.Error().Err(err).Msg("error failed to rebuild zip file")
-
+		return
 	}
 
 	err = fd.Execute()
@@ -388,15 +389,15 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 			span.LogKV("error", err)
 		}
-		zlog.Error().Err(err).Msg("error failed to rebuild file")
+		fd.StopRecordEventWithError()
 
+		zlog.Error().Err(err).Msg("error failed to rebuild file")
+		return
 	}
 	fd.Yield()
 
-	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 	if fd.PrintStatus() == rebuildexec.RebuildStatusInternalError {
 		return
-
 	}
 
 	zlog.Info().Msg("file rebuilt process  successfully ")
