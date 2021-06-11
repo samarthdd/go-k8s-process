@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -73,14 +72,11 @@ func (z *zipProcess) openZip(path string) error {
 }
 
 func (z *zipProcess) readAllFilesExt(extFolder string) {
-	var err error
 	for i := 0; i < len(z.zipEntity); i++ {
 		p := filepath.Join(z.workdir, extFolder, z.zipEntity[i].RandName)
 		fp := fmt.Sprintf("%s%s", p, z.ext)
-		z.zipEntity[i].b, err = ioutil.ReadFile(fp)
-		if err != nil {
-			log.Println(err)
-		}
+		z.zipEntity[i].b, _ = ioutil.ReadFile(fp)
+
 	}
 
 }

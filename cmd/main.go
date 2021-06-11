@@ -277,6 +277,7 @@ func ProcessMessage(d amqp.Table) error {
 			defer cancel()
 			// Update the context with the span for the subsequent reference.
 			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+			zlog.Info().Msg("file downloaded from minio successfully")
 
 		} else {
 			if d["file-id"] == nil {
@@ -345,26 +346,54 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	randPath := rebuildexec.RandStringRunes(16)
 	fileTtype := "*" // wild card
-	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
-	err := fd.Rebuild()
-	//fd, err := GWRF(f, fileid, fileTtype, randPath)
 
-	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
+	if JeagerStatus == true {
+		span, _ := opentracing.StartSpanFromContext(ctx, "rebuild")
+		defer span.Finish()
+		span.LogKV("file-id", fileid)
+	}
+
+	processDir := "/tmp/glrebuild"
+	cmp, _ := d["content-management-policy"].([]byte)
+
+	fd := rebuildexec.NewRebuild(f, cmp, fileid, fileTtype, randPath, processDir)
+
+	defer func() {
+		fd.Clean()
+		status := fd.PrintStatus()
+		d["rebuild-processing-status"] = status
+		d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
+		d["file-outcome"] = rebuildexec.Gwoutcome(status)
+		log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
+
+	}()
+
+	err := fd.RebuildSetup()
+
 	if err != nil {
 		if JeagerStatus == true {
 
 			span.LogKV("error", err)
 		}
-		zlog.Error().Err(err).Msg("error failed to rebuild file")
-
+		fd.StopRecordEventWithError()
+		zlog.Error().Err(err).Msg("error failed to rebuild zip file")
+		return
 	}
 
-	status := fd.PrintStatus()
-	d["rebuild-processing-status"] = status
-	d["rebuild-sdk-version"] = rebuildexec.GetSdkVersion()
-	d["file-outcome"] = rebuildexec.Gwoutcome(status)
+	err = fd.Execute()
+	if err != nil {
+		if JeagerStatus == true {
 
-	if status == "INTERNAL ERROR" {
+			span.LogKV("error", err)
+		}
+		fd.StopRecordEventWithError()
+
+		zlog.Error().Err(err).Msg("error failed to rebuild file")
+		return
+	}
+	fd.Yield()
+
+	if fd.PrintStatus() == rebuildexec.RebuildStatusInternalError {
 		return
 	}
 
@@ -471,24 +500,6 @@ func getFile(url string) ([]byte, error) {
 		return f, err
 	}
 	return f, nil
-
-}
-
-// glasswall rbuild file
-func GWRF(f []byte, fileid string, fileTtype string, randPath string) (rebuildexec.GwRebuild, error) {
-	if JeagerStatus == true {
-		span, _ := opentracing.StartSpanFromContext(ctx, "rebuild")
-		defer span.Finish()
-		span.LogKV("file-id", fileid)
-	}
-	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
-	err := fd.Rebuild()
-	if err != nil {
-
-		zlog.Error().Err(err).Msg("error failed to rebuild file")
-
-	}
-	return fd, err
 
 }
 

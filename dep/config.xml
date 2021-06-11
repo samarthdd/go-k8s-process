@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <config>
   <pdfConfig>    
-    <watermark>Glasswall Protected</watermark>
+    <watermark>Glasswall Approved</watermark>
     <acroform>sanitise</acroform>
     <metadata>sanitise</metadata>
     <javascript>sanitise</javascript>

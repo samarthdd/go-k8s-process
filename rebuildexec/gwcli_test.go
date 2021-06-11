@@ -87,7 +87,7 @@ func setupDep(mainDir string) error {
 	cmd := exec.Command("cp", "-r", absouluteDepDir, filepath.Join(mainProjectPath, "tmp"))
 	cmd.Stdout = &out
 	err := cmd.Run()
-	log.Println(string(out.Bytes()))
+	log.Println(out.String())
 	if err != nil {
 		log.Println(err)
 
@@ -122,31 +122,13 @@ func setupDep(mainDir string) error {
 	return nil
 }
 
-func openSampleFile(filepath string) []byte {
-	b, err := ioutil.ReadFile(sampleFilePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return b
-}
-
-func newRebuild(filepath string) GwRebuild {
-
-	randPath := RandStringRunes(16)
-	f := openSampleFile(filepath)
-
-	rb := New(f, sampleFileName, "*", randPath)
-	return rb
-}
-
 func moveFile(oldpath, newpath string) error {
 	var out bytes.Buffer
 
 	cmd := exec.Command("cp", oldpath, newpath)
 	cmd.Stdout = &out
 	err := cmd.Run()
-	log.Println(string(out.Bytes()))
+	log.Println(out.String())
 	if err != nil {
 		log.Println(err)
 
@@ -225,34 +207,65 @@ func TestGwCliExec(t *testing.T) {
 
 }
 
-/*
 func TestRebuild(t *testing.T) {
 
-	//test with multiple file , conormed and managed
-	var format = []string{
-		".pdf",
-		".pnv",
-		".doc",
-		".rar",
-		"altred.pdf",
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
+
+	files := []struct {
+		Name   string
+		Status string
+	}{
+		{"sample.pdf", RebuildStatusCleaned},
+		{"sample.jpg", RebuildStatusCleaned},
+		{"sample.doc", RebuildStatusClean},
+		{"unprocessable.jpg", RebuildStatusUnprocessable},
+		{"nested.zip", RebuildStatusCleaned},
 	}
 
-	for _, v := range format {
-		rb := newRebuild(v)
-		err := rb.Rebuild()
+	path := filepath.Join(mainProjectPath, depDirTemp)
+	for i := range files {
+		f, err := ioutil.ReadFile(filepath.Join(path, files[i].Name))
 		if err != nil {
-			t.Errorf("")
+			t.Error(err)
 		}
 
-	}
-}
+		randPath := RandStringRunes(16)
+		fd := NewRebuild(f, nil, files[i].Name, "*", randPath, processDir)
+		err = fd.RebuildSetup()
+		if err != nil {
+			t.Error(err)
+		}
+		err = fd.Execute()
+		if err != nil {
+			t.Error(err)
+		}
+		fd.Yield()
 
-*/
-func TestPrintversion(t *testing.T) {
-	//err := PrintVersion()
-	//	if err != nil {
-	//		t.Errorf("error printing version : %s", err)
-	//	}
+		if fd.PrintStatus() != files[i].Status {
+			t.Errorf("errors %s expected %s got %s", files[i].Name, files[i].Status, fd.PrintStatus())
+
+		}
+		if fd.RebuiltFile == nil && files[i].Status != RebuildStatusUnprocessable {
+			t.Error("rebuilt file not found")
+
+		}
+		if fd.ReportFile == nil {
+			t.Error("report file not found")
+		}
+		if fd.LogFile == nil {
+			t.Error("Log  file not found")
+		}
+		if fd.GwLogFile == nil {
+			t.Error("gw Log file not found")
+
+		}
+		if fd.Metadata == nil {
+			t.Error("metadata  file not found")
+
+		}
+		//	fd.Clean()
+
+	}
 
 }
 
@@ -280,85 +293,6 @@ func TestCliExitStatus(t *testing.T) {
 	}
 }
 
-func TestParseStatus(t *testing.T) {
-	LogTest := []struct {
-		log    string
-		status string
-	}{
-		{LogFileClean, "CLEAN"},
-		{LogFileCleaned, "CLEANED"},
-		{LogFileExpir, "SDK EXPIRED"},
-		{logFileUnprocessable, "UNPROCESSABLE"},
-	}
-	for _, v := range LogTest {
-		res := parseStatus(v.log)
-		if res != v.status {
-			t.Errorf("fails expected %s got %s", v.status, res)
-		}
-	}
-}
-
-func TestParseLogExpir(t *testing.T) {
-	LogTest := []struct {
-		log    string
-		status string
-	}{
-		{LogFileExpir, "SDK EXPIRED"},
-		{LogFileClean, ""},
-	}
-	for _, v := range LogTest {
-		res := parseLogExpir(v.log)
-		if res != v.status {
-			t.Errorf("fails expected %s got %s", v.status, res)
-		}
-	}
-}
-
-func TestParseVersion(t *testing.T) {
-	validVersionOutput := `1.221
-SUCCESS
-`
-	nonValidVersionOutput := "error no such command"
-	emptyOutput := ""
-
-	versionTest := []struct {
-		text    string
-		version string
-	}{
-		{validVersionOutput, "1.221"},
-		{nonValidVersionOutput, "error no such command"},
-		{emptyOutput, ""},
-	}
-	for _, v := range versionTest {
-		res := parseVersion(v.text)
-		if res != v.version {
-			if v.version == "" {
-
-				t.Errorf("fails expected empty string got %s", res)
-			} else {
-				t.Errorf("fails expected %s got %s", v.version, res)
-
-			}
-
-		}
-	}
-}
-
-func TestRebuildFile(t *testing.T) {
-
-	f, _ := ioutil.ReadFile(filepath.Join(mainProjectPath, depDirTemp, "sample.pdf"))
-	randPath := RandStringRunes(16)
-	fd := New(f, "samplee.pdf", "*", randPath)
-	err := fd.Rebuild()
-	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
-
-	if err != nil {
-		t.Error(err)
-
-	}
-
-}
-
 func changeIniconfigToValidPath(path string) {
 	cfg, err := ini.Load(path)
 	if err != nil {
@@ -384,40 +318,215 @@ func changeIniconfigToValidPath(path string) {
 		log.Printf("Fail to save ini file : %s", err)
 
 	}
+
 }
 
 func TestRebuildZip(t *testing.T) {
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
 
 	zipPath := filepath.Join(mainProjectPath, depDirTemp, "nested.zip")
 
 	f, _ := ioutil.ReadFile(zipPath)
 	randPath := RandStringRunes(16)
-	fd := New(f, "nested.zip", "zip", randPath)
-	err := fd.Rebuild()
-	log.Printf("\033[34m rebuild status a is  : %s\n", fd.PrintStatus())
+
+	fd := NewRebuild(f, nil, "nested.zip", "zip", randPath, processDir)
+	err := fd.RebuildSetup()
 
 	if err != nil {
 		t.Error(err)
 
 	}
-}
-func TestParseContnetType(t *testing.T) {
-	nonCompatible := "pdf"
-	validPdf := "application/pdf"
-	validPng := "image/png"
-	ctTest := []struct {
-		ct     string
-		result string
-	}{
-		{nonCompatible, "pdf"},
-		{validPng, "png"},
-		{validPdf, "pdf"},
+
+	err = fd.Execute()
+	if err != nil {
+		t.Error(err)
 	}
-	for _, v := range ctTest {
-		res := parseContnetType(v.ct)
-		if res != v.result {
-			t.Errorf("fails expected %s got %s", v.result, res)
-		}
+	fd.Yield()
+
+	if fd.PrintStatus() != "CLEANED" {
+		t.Errorf("errors %s expected %s got %s", "RebuildZip", "CLEANED", fd.PrintStatus())
+
 	}
+	fd.Clean()
 }
 
+func TestContentManagmentPolicy(t *testing.T) {
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
+
+	Path := filepath.Join(mainProjectPath, depDirTemp, "sample.pdf")
+
+	f, _ := ioutil.ReadFile(Path)
+
+	cmpPath := filepath.Join(mainProjectPath, depDirTemp, "cmp.json")
+	cmp, _ := ioutil.ReadFile(cmpPath)
+	cmp = bytes.TrimPrefix(cmp, []byte("\xef\xbb\xbf"))
+
+	randPath := RandStringRunes(16)
+
+	fd := NewRebuild(f, cmp, "sample.pdf", "*", randPath, processDir)
+	err := fd.RebuildSetup()
+
+	if err != nil {
+		t.Error(err)
+
+	}
+
+	err = fd.Execute()
+	if err != nil {
+		t.Error(err)
+	}
+	fd.Yield()
+
+	if fd.PrintStatus() != "CLEAN" {
+		t.Errorf("errors %s expected %s got %s", "TestContentManagmentPolicy", "CLEANED", fd.PrintStatus())
+
+	}
+	if fd.cmp.PolicyId != "1c47fecd-be3c-48c8-9e8d-ee4abc7eafef" {
+		t.Errorf("errors %s expected %s got %s", "TestContentManagmentPolicy", "1c47fecd-be3c-48c8-9e8d-ee4abc7eafef", fd.cmp.PolicyId)
+
+	}
+	fd.Clean()
+}
+
+func TestRebuildFileInternalError(t *testing.T) {
+	os.Setenv("GWCLI", "NONVALIDPATH")
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
+
+	f, _ := ioutil.ReadFile(filepath.Join(mainProjectPath, depDirTemp, "sample.pdf"))
+	randPath := RandStringRunes(16)
+	fd := NewRebuild(f, nil, "samplee.pdf", "*", randPath, processDir)
+	err := fd.RebuildSetup()
+
+	if err != nil {
+		t.Error(err)
+
+	}
+	err = fd.Execute()
+	if err == nil {
+		t.Errorf("expected CLI error with exit code 1 ")
+	}
+	if fd.PrintStatus() != RebuildStatusInternalError {
+		t.Errorf("error expected %s got %s ", RebuildStatusInternalError, fd.PrintStatus())
+
+	}
+	t.Cleanup(func() {
+		os.Setenv("GWCLI", filepath.Join(mainProjectPath, CliTemp))
+
+	})
+}
+func TestExpired(t *testing.T) {
+	currentTag, err := getCurrentGitTag()
+	if err != nil {
+		t.Error(err)
+
+	}
+	if len(currentTag) > 1 {
+		currentTag = currentTag[:len(currentTag)-1]
+	}
+	err = checkoutTag("1.191")
+	if err != nil {
+		t.Error(err)
+
+	}
+	errSetup := setupExpireLibrary()
+	if errSetup != nil {
+		t.Error(errSetup)
+
+	}
+	processDir := filepath.Join(mainProjectPath, "/tmp/glrebuild")
+
+	Path := filepath.Join(mainProjectPath, depDirTemp, "sample.pdf")
+
+	f, _ := ioutil.ReadFile(Path)
+	randPath := RandStringRunes(16)
+
+	fd := NewRebuild(f, nil, "sample.pdf", "*", randPath, processDir)
+	err = fd.RebuildSetup()
+
+	if err != nil {
+		t.Error(err)
+
+	}
+
+	err = fd.Execute()
+	if err != nil {
+		t.Error(err)
+	}
+	fd.Yield()
+
+	if fd.PrintStatus() != RebuildStatusExpired {
+		t.Errorf("errors %s expected %s got %s", "TestExpired", RebuildStatusExpired, fd.PrintStatus())
+
+	}
+	fd.Clean()
+	t.Cleanup(func() {
+		checkoutTag(currentTag)
+		os.Setenv("LD_LIBRARY_PATH", filepath.Join(mainProjectPath, depDirTemp))
+		os.Setenv("GWCLI", filepath.Join(mainProjectPath, "tmp", "expire-cli-path", "glasswallCLI"))
+	})
+
+}
+func setupExpireLibrary() error {
+
+	os.MkdirAll(filepath.Join(mainProjectPath, "tmp", "expire-cli-path"), 0777)
+
+	expireCliPath := filepath.Join(mainProjectPath, "tmp", "expire-cli-path", "glasswallCLI")
+	expireSoPath := filepath.Join(mainProjectPath, "tmp", "expire-cli-path", "libglasswall.classic.so")
+	GwCliPath1191 := filepath.Join(mainProjectPath, GwCliPath)
+	GwEnginePath1991 := filepath.Join(mainProjectPath, GwEnginePath)
+	cmd := exec.Command("cp", GwCliPath1191, expireCliPath)
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	cmd = exec.Command("cp", GwEnginePath1991, expireSoPath)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	err = os.Chmod(expireCliPath, 0777)
+	if err != nil {
+		return err
+	}
+	os.Setenv("LD_LIBRARY_PATH", filepath.Join(mainProjectPath, "tmp", "expire-cli-path"))
+	os.Setenv("GWCLI", expireCliPath)
+
+	return nil
+}
+
+func checkoutTag(tag string) error {
+
+	absouluteEngine := filepath.Join(mainProjectPath, "sdk-rebuild-eval")
+
+	cmd := exec.Command("git", "checkout", tag)
+	cmd.Dir = absouluteEngine
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func getCurrentGitTag() (string, error) {
+
+	absouluteEngine := filepath.Join(mainProjectPath, "sdk-rebuild-eval")
+
+	var buf bytes.Buffer
+
+	cmd := exec.Command("git", "describe", "--tags")
+	cmd.Stdout = &buf
+	cmd.Dir = absouluteEngine
+	err := cmd.Run()
+	if err != nil {
+		log.Println(buf.String())
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func TestClean(t *testing.T) {
+	t.Cleanup(func() {
+		path := filepath.Join(mainProjectPath, "tmp")
+		os.RemoveAll(path)
+	})
+}

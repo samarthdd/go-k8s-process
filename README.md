@@ -28,7 +28,15 @@ These pods are controlled the rebuild pods controller.
 
 ### Dev section
 
+##### Content management policy 
+
+```
+- the k8-process accept a rabbitmq header "content-management-policy" that is expected to contain the content management policy in json format 
+```
+---
+
 the k8-process add additional values to the rabbitmq header wich contain additional inforamtions :
+
 ```
 - "rebuild-sdk-version" which is the sdk version
 ```
