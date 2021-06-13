@@ -82,7 +82,7 @@ func New(file []byte, fileId, fileType, randDir string) GwRebuild {
 			offic, err := DiffZipOffic(file)
 			zlog.Error().Err(err).Msg("error DffZipOffic func ")
 			if offic == "office" {
-				fileType = "office"
+				fileType = "*"
 			} else {
 				fileType = "zip"
 
