@@ -28,7 +28,7 @@ func Init(service string) (opentracing.Tracer, io.Closer) {
 	if err != nil {
 		panic("Could not parse Jaeger env vars: " + err.Error())
 	}
-	fmt.Println(defcfg.Reporter.LocalAgentHostPort)
+	//fmt.Println(defcfg.Reporter.LocalAgentHostPort)
 	tracer, closer, err := cfg.NewTracer()
 	if err != nil {
 		panic("Could not initialize jaeger tracer: " + err.Error())

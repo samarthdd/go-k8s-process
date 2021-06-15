@@ -1,6 +1,7 @@
 package rebuildexec
 
 import (
+	"archive/zip"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -55,6 +56,7 @@ func GetSdkVersion() string {
 
 type GwRebuild struct {
 	File     []byte
+	FileId   string
 	FileName string
 	FileType string
 	workDir  string
@@ -68,21 +70,32 @@ type GwRebuild struct {
 	Metadata    []byte
 }
 
-func New(file []byte, fileName, fileType, randDir string) GwRebuild {
+func New(file []byte, fileId, fileType, randDir string) GwRebuild {
 
 	fullpath := filepath.Join(INPUT, randDir)
+	randstr := RandStringRunes(16)
 
 	if len(file) > 512 {
 		c := http.DetectContentType(file[:511])
+
 		if c == "application/zip" {
-			fileType = "zip"
+			offic, err := DiffZipOffic(file)
+			zlog.Error().Err(err).Msg("error DffZipOffic func ")
+			if offic == "office" {
+				fileType = "*"
+			} else {
+				fileType = "zip"
+
+			}
+
 		}
 
 	}
 
 	gwRebuild := GwRebuild{
 		File:     file,
-		FileName: fileName,
+		FileId:   fileId,
+		FileName: randstr,
 		FileType: fileType,
 		workDir:  fullpath,
 	}
@@ -531,7 +544,7 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 }
 func (r *GwRebuild) event() error {
 	var ev events.EventManager
-	ev = events.EventManager{FileId: r.FileName}
+	ev = events.EventManager{FileId: r.FileId}
 	ev.NewDocument("00000000-0000-0000-0000-000000000000")
 
 	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
@@ -571,4 +584,22 @@ func parseContnetType(s string) string {
 		return sl[1]
 	}
 	return s
+}
+func DiffZipOffic(file []byte) (string, error) {
+	var office string = ""
+
+	r, err := zip.NewReader(bytes.NewReader(file), int64(len(file)))
+	if err != nil {
+		return "", err
+	}
+
+	for _, f := range r.File {
+
+		if f.Name == "_rels/.rels" {
+			office = "office"
+			break
+		}
+	}
+	return office, nil
+
 }
