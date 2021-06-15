@@ -7,6 +7,7 @@ require (
 	github.com/go-ini/ini v1.62.0
 	github.com/k8-proxy/k8-go-comm v0.1.5
 	github.com/minio/minio-go/v7 v7.0.10
+	github.com/opencontainers/runc v1.0.0-rc95 // indirect
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/ory/dockertest/v3 v3.6.5
 	github.com/rs/zerolog v1.21.0
