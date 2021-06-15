@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/k8-proxy/dockertest/v3"
+	"github.com/k8-proxy/dockertest/v3/docker"
 	"github.com/k8-proxy/go-k8s-process/tracing"
 	"github.com/k8-proxy/k8-go-comm/pkg/minio"
 	"github.com/k8-proxy/k8-go-comm/pkg/rabbitmq"
 	min7 "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/opentracing/opentracing-go"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
 	"github.com/streadway/amqp"
 )
 
