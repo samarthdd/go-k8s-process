@@ -97,6 +97,8 @@ func New(file, cmp []byte, fileId, fileType, randDir string) GwRebuild {
 	cmPolicy := policy{}
 	if len(cmp) > 0 {
 		cmpState = true
+		cmp = bytes.TrimPrefix(cmp, []byte("\xef\xbb\xbf"))
+
 		cmPolicy, _ = cmpJsonMarshal(cmp)
 
 	}
