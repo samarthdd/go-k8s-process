@@ -71,13 +71,10 @@ type GwRebuild struct {
 	Metadata    []byte
 }
 
-
 func New(file, cmp []byte, fileId, fileType, randDir string) GwRebuild {
-
 
 	fullpath := filepath.Join(INPUT, randDir)
 	randstr := RandStringRunes(16)
-
 	if len(file) > 512 {
 		c := http.DetectContentType(file[:511])
 		if c == "application/zip" {
@@ -557,6 +554,7 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 
 	return err
 }
+
 func (r *GwRebuild) event() error {
 	var ev events.EventManager
 
