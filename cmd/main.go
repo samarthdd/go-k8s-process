@@ -345,7 +345,10 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	randPath := rebuildexec.RandStringRunes(16)
 	fileTtype := "*" // wild card
-	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
+
+	cmp, _ := d["content-management-policy"].([]byte)
+
+	fd := rebuildexec.New(f, cmp, fileid, fileTtype, randPath)
 	err := fd.Rebuild()
 	//fd, err := GWRF(f, fileid, fileTtype, randPath)
 
@@ -481,7 +484,8 @@ func GWRF(f []byte, fileid string, fileTtype string, randPath string) (rebuildex
 		defer span.Finish()
 		span.LogKV("file-id", fileid)
 	}
-	fd := rebuildexec.New(f, fileid, fileTtype, randPath)
+
+	fd := rebuildexec.New(f, nil, fileid, fileTtype, randPath)
 	err := fd.Rebuild()
 	if err != nil {
 
