@@ -61,6 +61,8 @@ type GwRebuild struct {
 	FileType string
 	workDir  string
 
+	cmp           policy
+	cmpState      bool
 	statusMessage string
 
 	RebuiltFile []byte
@@ -70,11 +72,10 @@ type GwRebuild struct {
 	Metadata    []byte
 }
 
-func New(file []byte, fileId, fileType, randDir string) GwRebuild {
+func New(file, cmp []byte, fileId, fileType, randDir string) GwRebuild {
 
 	fullpath := filepath.Join(INPUT, randDir)
 	randstr := RandStringRunes(16)
-
 	if len(file) > 512 {
 		c := http.DetectContentType(file[:511])
 
@@ -92,10 +93,23 @@ func New(file []byte, fileId, fileType, randDir string) GwRebuild {
 
 	}
 
+	cmpState := false
+	cmPolicy := policy{}
+	if len(cmp) > 0 {
+		cmpState = true
+		cmp = bytes.TrimPrefix(cmp, []byte("\xef\xbb\xbf"))
+
+		cmPolicy, _ = cmpJsonMarshal(cmp)
+
+	}
+
 	gwRebuild := GwRebuild{
 		File:     file,
 		FileId:   fileId,
 		FileName: randstr,
+		cmp:      cmPolicy,
+		cmpState: cmpState,
+
 		FileType: fileType,
 		workDir:  fullpath,
 	}
@@ -251,10 +265,20 @@ func (r *GwRebuild) exe() error {
 		return err
 	}
 
-	cmd = exec.Command("cp", xmlconfig, randXmlconfig)
-	err = cmd.Run()
-	if err != nil {
-		return err
+	if r.cmpState {
+		xmlCmp, _ := r.cmp.cmpXmlconv()
+
+		errWrite := ioutil.WriteFile(randXmlconfig, xmlCmp, 0777)
+		if errWrite != nil {
+			return errWrite
+		}
+	} else {
+
+		cmd = exec.Command("cp", xmlconfig, randXmlconfig)
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
 	}
 
 	cfg, err := ini.Load(randConfigini)
@@ -542,10 +566,17 @@ func (r *GwRebuild) zipAll(z zipProcess, ext string) error {
 
 	return err
 }
+
 func (r *GwRebuild) event() error {
 	var ev events.EventManager
+
 	ev = events.EventManager{FileId: r.FileId}
-	ev.NewDocument("00000000-0000-0000-0000-000000000000")
+
+	policyId := "00000000-0000-0000-0000-000000000000"
+	if r.cmp.PolicyId != "" {
+		policyId = r.cmp.PolicyId
+	}
+	ev.NewDocument(policyId)
 
 	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
 
