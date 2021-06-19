@@ -326,6 +326,11 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 	d["file-outcome"] = rebuildexec.Gwoutcome(status)
 
 	if status == "INTERNAL ERROR" {
+		if JeagerStatus == true {
+
+			span.LogKV("error", err)
+		}
+
 		return
 	}
 
