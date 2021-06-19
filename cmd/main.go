@@ -22,8 +22,6 @@ import (
 	"github.com/k8-proxy/go-k8s-process/tracing"
 	miniov7 "github.com/minio/minio-go/v7"
 	"github.com/opentracing/opentracing-go"
-
-	traclog "github.com/opentracing/opentracing-go/log"
 )
 
 var (
@@ -53,16 +51,16 @@ var (
 	minioAccessKey   = os.Getenv("MINIO_ACCESS_KEY")
 	minioSecretKey   = os.Getenv("MINIO_SECRET_KEY")
 	cleanMinioBucket = os.Getenv("MINIO_CLEAN_BUCKET")
+	JeagerStatusEnv  = os.Getenv("JAEGER_AGENT_ON")
 
 	publisher     *amqp.Channel
 	minioClient   *miniov7.Client
 	ctx           context.Context
-	helloTo       string
+	TraceFileid   string
 	ProcessTracer opentracing.Tracer
 	JeagerStatus  bool
 	connrecive    *amqp.Connection
 	connsend      *amqp.Connection
-	helloStr      string
 )
 
 const (
@@ -72,76 +70,41 @@ const (
 type amqpHeadersCarrier map[string]interface{}
 
 func main() {
-	var podProcessTracer opentracing.Tracer
-	var spanpod opentracing.Span
-	JeagerStatusEnv := os.Getenv("JAEGER_AGENT_ON")
+
 	if JeagerStatusEnv == "true" {
 		JeagerStatus = true
-		tracer, closer := tracing.Init("process-pod")
-		defer closer.Close()
-		opentracing.SetGlobalTracer(tracer)
-		podProcessTracer = tracer
-		spanpod = podProcessTracer.StartSpan("pod")
-		spanpod.SetTag("process-pod", "try-start")
-		defer spanpod.Finish()
-		spanpod.LogKV("error", "false")
 	} else {
 		JeagerStatus = false
 	}
 	var err error
-
 	// Get a connrecive
 	connrecive, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connrecive")
-		if JeagerStatusEnv == "true" {
-			spanpod.LogKV("error", "true")
-			spanpod.LogKV("error-msg", err)
-		}
 	}
 	// Get a send
 	connsend, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq connrecive ")
-		if JeagerStatusEnv == "true" {
-
-			spanpod.LogKV("error", "true")
-			spanpod.LogKV("error-msg", err)
-		}
 	}
 
 	// Initiate a publisher on processing exchange
 	publisher, err = rabbitmq.NewQueuePublisher(connsend, ProcessingOutcomeExchange, amqp.ExchangeDirect)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq publisher ")
-		if JeagerStatusEnv == "true" {
-
-			spanpod.LogKV("error", "true")
-			spanpod.LogKV("error-msg", err)
-		}
 	}
 
 	// Start a consumer
 	msgs, ch, err := rabbitmq.NewQueueConsumerQos(connrecive, ProcessingRequestQueueName, ProcessingRequestExchange, amqp.ExchangeDirect, ProcessingRequestRoutingKey, amqp.Table{})
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start rabbitmq consumer ")
-		if JeagerStatusEnv == "true" {
 
-			spanpod.LogKV("error", "true")
-			spanpod.LogKV("error-msg", err)
-		}
 	}
-
 	defer ch.Close()
-
 	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("error could not start minio client ")
-		if JeagerStatusEnv == "true" {
 
-			spanpod.LogKV("error", "true")
-			spanpod.LogKV("error-msg", err)
-		}
 	}
 
 	log.Printf("\033[32m GW rebuild SDK version : %s\n", rebuildexec.GetSdkVersion())
@@ -190,12 +153,12 @@ func processend(err error, d amqp.Table) {
 			opentracing.FollowsFrom(spCtx),
 		)
 		if d["file-id"] == nil {
-			helloTo = "nil-file-id"
+			TraceFileid = "nil-file-id"
 		} else {
-			helloTo = d["file-id"].(string)
+			TraceFileid = d["file-id"].(string)
 
 		}
-		sp.SetTag("file-id", helloTo)
+		sp.SetTag("file-id", TraceFileid)
 		defer sp.Finish()
 		ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
 		defer cancel()
@@ -219,12 +182,12 @@ func processend(err error, d amqp.Table) {
 			opentracing.FollowsFrom(spCtx),
 		)
 		if d["file-id"] == nil {
-			helloTo = "nil-file-id"
+			TraceFileid = "nil-file-id"
 		} else {
-			helloTo = d["file-id"].(string)
+			TraceFileid = d["file-id"].(string)
 
 		}
-		sp.SetTag("file-id", helloTo)
+		sp.SetTag("file-id", TraceFileid)
 		defer sp.Finish()
 		ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
 		defer cancel()
@@ -266,12 +229,12 @@ func ProcessMessage(d amqp.Table) error {
 				opentracing.FollowsFrom(spCtx),
 			)
 			if d["file-id"] == nil {
-				helloTo = "nil-file-id"
+				TraceFileid = "nil-file-id"
 			} else {
-				helloTo = d["file-id"].(string)
+				TraceFileid = d["file-id"].(string)
 
 			}
-			sp.SetTag("file-id", helloTo)
+			sp.SetTag("file-id", TraceFileid)
 			defer sp.Finish()
 			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
 			defer cancel()
@@ -280,25 +243,21 @@ func ProcessMessage(d amqp.Table) error {
 
 		} else {
 			if d["file-id"] == nil {
-				helloTo = "nil-file-id"
+				TraceFileid = "nil-file-id"
 			} else {
-				helloTo = d["file-id"].(string)
+				TraceFileid = d["file-id"].(string)
 
 			}
 			span := ProcessTracer.StartSpan("go-k8s-process")
-			span.SetTag("file-id", helloTo)
+			span.SetTag("file-id", TraceFileid)
 			defer span.Finish()
-
 			ctx = opentracing.ContextWithSpan(context.Background(), span)
-
 		}
-
-		//helloStr = msgrecivedTrace(helloTo)
 	}
 
 	if d["file-id"] == nil ||
 		d["source-presigned-url"] == nil {
-		return fmt.Errorf("Headers value is nil")
+		return fmt.Errorf("headers value is nil")
 	}
 
 	fileID := d["file-id"].(string)
@@ -350,7 +309,6 @@ func clirebuildProcess(f []byte, fileid string, d amqp.Table) {
 
 	fd := rebuildexec.New(f, cmp, fileid, fileTtype, randPath)
 	err := fd.Rebuild()
-	//fd, err := GWRF(f, fileid, fileTtype, randPath)
 
 	log.Printf("\033[34m rebuild status is  : %s\n", fd.PrintStatus())
 	if err != nil {
@@ -477,25 +435,6 @@ func getFile(url string) ([]byte, error) {
 
 }
 
-// glasswall rbuild file
-func GWRF(f []byte, fileid string, fileTtype string, randPath string) (rebuildexec.GwRebuild, error) {
-	if JeagerStatus == true {
-		span, _ := opentracing.StartSpanFromContext(ctx, "rebuild")
-		defer span.Finish()
-		span.LogKV("file-id", fileid)
-	}
-
-	fd := rebuildexec.New(f, nil, fileid, fileTtype, randPath)
-	err := fd.Rebuild()
-	if err != nil {
-
-		zlog.Error().Err(err).Msg("error failed to rebuild file")
-
-	}
-	return fd, err
-
-}
-
 func uploadMinio(file []byte, filename string) (string, error) {
 	if minioClient == nil {
 		return "", fmt.Errorf("minio client not found")
@@ -539,37 +478,6 @@ func minioUploadProcess(file []byte, baseName, extName, headername string, d amq
 
 	zlog.Info().Msg(m)
 	d[headername] = urlr
-}
-
-func tracest(msg string) {
-	tracer, closer := tracing.Init("process")
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
-	helloTo = msg
-	span := tracer.StartSpan("process file")
-	span.SetTag("file-id", helloTo)
-	defer span.Finish()
-
-	ctx = opentracing.ContextWithSpan(context.Background(), span)
-
-	helloStr = msgrecivedTrace(helloTo)
-}
-func msgrecivedTrace(helloTo string) string {
-	span, _ := opentracing.StartSpanFromContext(ctx, "processing-request")
-	defer span.Finish()
-
-	helloStr = fmt.Sprintf("new processing file id, %s!", helloTo)
-	span.LogFields(
-		traclog.String("event", "start-processing-request"),
-		traclog.String("value", helloStr),
-	)
-
-	return helloStr
-}
-func mgsendTrace(ctx context.Context, helloStr string) {
-	span, _ := opentracing.StartSpanFromContext(ctx, helloStr)
-	defer span.Finish()
-	span.LogKV("event", helloStr)
 }
 
 func Inject(span opentracing.Span, hdrs amqp.Table) error {

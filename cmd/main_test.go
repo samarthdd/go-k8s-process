@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"net/http"
@@ -152,6 +154,9 @@ func TestProcessMessage(t *testing.T) {
 	ProcessingOutcomeExchange = "processing-outcome-exchange"
 	ProcessingOutcomeRoutingKey = "processing-outcome"
 	ProcessingOutcomeQueueName = "processing-outcome-queue"
+	adaptationRequestQueueHostname = "localhost"
+	adaptationRequestQueuePort = "5672"
+	JeagerStatusEnv = "true"
 
 	// get env secrets
 	var errstring error
@@ -253,18 +258,34 @@ func TestProcessMessage(t *testing.T) {
 	}
 	log.Println("[√] create clean Minio Bucket successfully")
 	fn := "unittest.pdf"
-	fullpath := "http://localhost:9000"
-	fnrebuild := fmt.Sprintf("rebuild-%s", fn)
+	//fullpath := "http://localhost:9000"
+	//fnrebuild := fmt.Sprintf("rebuild-%s", fn)
+	// Upload the source file to Minio and Get presigned URL
+	presignedUrlExpireIn := time.Minute * 10
+	sourcePresignedURL, err := minio.UploadAndReturnURL(minioClient, sourceMinioBucket, fn, presignedUrlExpireIn)
+	if err != nil {
+		t.Errorf("error uploading file from minio : %s", err)
+	}
+
 	table := amqp.Table{
-		"file-id":               fn,
-		"source-presigned-url":  fullpath,
-		"rebuilt-file-location": fnrebuild,
-		"generate-report":       "true",
-		"request-mode":          "respmod",
+		"file-id":              fn,
+		"source-presigned-url": sourcePresignedURL.String(),
+		"generate-report":      "true",
+		"request-mode":         "respmod",
 	}
 
 	var d amqp.Delivery
 	d.Headers = table
+	TraceFileid = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", TraceFileid)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+	if err := Inject(span, table); err != nil {
+		t.Errorf("ProcessMessage = %d; want nil", err)
+
+	}
 	t.Run("ProcessMessage", func(t *testing.T) {
 		result := ProcessMessage(table)
 		if result != nil {
@@ -276,6 +297,83 @@ func TestProcessMessage(t *testing.T) {
 
 		}
 
+	})
+
+	t.Run("main", func(t *testing.T) {
+
+		done := make(chan bool)
+
+		go func() {
+			t.Run("main", func(t *testing.T) {
+				main()
+			})
+		}()
+		time.Sleep(10 * time.Second)
+
+		close(done)
+		<-done
+	})
+	t.Run("Test_uploadMinio", func(t *testing.T) {
+		data, err := ioutil.ReadFile("unittest.pdf")
+		if err != nil {
+			t.Errorf("uploadMinio() error %s ", err)
+		}
+		type args struct {
+			file     []byte
+			filename string
+		}
+		tests := []struct {
+			name string
+			args args
+		}{
+			{
+				"uploadMinio",
+				args{data, "unittest.pdf"},
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := uploadMinio(tt.args.file, tt.args.filename)
+				if err != nil {
+					t.Errorf("uploadMinio()  %s", err)
+				}
+
+			})
+		}
+	})
+
+	t.Run("Test_minioUploadProcess", func(t *testing.T) {
+		tablefile := amqp.Table{
+			"file-id":               "id-test.pdf",
+			"clean-presigned-url":   "http://localhost:9000",
+			"rebuilt-file-location": "./reb.pdf",
+			"reply-to":              "replay",
+		}
+		data, err := ioutil.ReadFile("unittest.pdf")
+		if err != nil {
+			t.Errorf("uploadMinio() error %s ", err)
+		}
+		type args struct {
+			file       []byte
+			baseName   string
+			extName    string
+			headername string
+			d          amqp.Table
+		}
+		tests := []struct {
+			name string
+			args args
+		}{
+			{
+				"minioUploadProcess",
+				args{data, "id-test", "pdf", "header", tablefile},
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				minioUploadProcess(tt.args.file, tt.args.baseName, tt.args.extName, tt.args.headername, tt.args.d)
+			})
+		}
 	})
 
 	// When you're done, kill and remove the container
@@ -321,9 +419,9 @@ func TestInject(t *testing.T) {
 
 	var d amqp.Delivery
 	d.Headers = tableout
-	helloTo = d.Headers["file-id"].(string)
+	TraceFileid = d.Headers["file-id"].(string)
 	span := ProcessTracer.StartSpan("ProcessFile")
-	span.SetTag("send-msg", helloTo)
+	span.SetTag("send-msg", TraceFileid)
 	defer span.Finish()
 
 	ctx = opentracing.ContextWithSpan(context.Background(), span)
@@ -366,9 +464,9 @@ func TestExtract(t *testing.T) {
 
 	var d amqp.Delivery
 	d.Headers = tableout
-	helloTo = d.Headers["file-id"].(string)
+	TraceFileid = d.Headers["file-id"].(string)
 	span := ProcessTracer.StartSpan("ProcessFile")
-	span.SetTag("send-msg", helloTo)
+	span.SetTag("send-msg", TraceFileid)
 	defer span.Finish()
 
 	ctx = opentracing.ContextWithSpan(context.Background(), span)
@@ -460,9 +558,9 @@ func TestExtractWithTracer(t *testing.T) {
 
 	var d amqp.Delivery
 	d.Headers = tableout
-	helloTo = d.Headers["file-id"].(string)
+	TraceFileid = d.Headers["file-id"].(string)
 	span := ProcessTracer.StartSpan("ProcessFile")
-	span.SetTag("send-msg", helloTo)
+	span.SetTag("send-msg", TraceFileid)
 	defer span.Finish()
 
 	ctx = opentracing.ContextWithSpan(context.Background(), span)
@@ -519,4 +617,43 @@ func createBucketIfNotExist(bucketName string) error {
 		}
 	}
 	return nil
+}
+
+func Test_processend(t *testing.T) {
+	tablefile := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tablenofile := amqp.Table{
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+
+	err1 := errors.New("file-id:not found")
+
+	type args struct {
+		err error
+		d   amqp.Table
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			"end-with-error",
+			args{err1, tablenofile},
+		},
+		{
+			"end-successfully",
+			args{nil, tablefile},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processend(tt.args.err, tt.args.d)
+		})
+	}
 }
