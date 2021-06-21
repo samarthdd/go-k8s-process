@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-ini/ini"
+	"github.com/h2non/filetype"
 	"github.com/k8-proxy/go-k8s-process/events"
 
 	zlog "github.com/rs/zerolog/log"
@@ -77,7 +78,7 @@ func New(file, cmp []byte, fileId, fileType, randDir string) GwRebuild {
 	fullpath := filepath.Join(INPUT, randDir)
 	randstr := RandStringRunes(16)
 	if len(file) > 512 {
-		c := http.DetectContentType(file[:511])
+		c := http.DetectContentType(file[:512])
 
 		if c == "application/zip" {
 			offic, err := DiffZipOffic(file)
@@ -580,7 +581,7 @@ func (r *GwRebuild) event() error {
 
 	if r.statusMessage != "INTERNAL ERROR" && r.statusMessage != "SDK EXPIRED" {
 
-		fileType := parseContnetType(http.DetectContentType(r.File[:511]))
+		fileType := GetContentType(r.File)
 
 		ev.FileTypeDetected(fileType)
 		gwoutcome := Gwoutcome(r.statusMessage)
@@ -616,6 +617,7 @@ func parseContnetType(s string) string {
 	}
 	return s
 }
+
 func DiffZipOffic(file []byte) (string, error) {
 	var office string = ""
 
@@ -633,4 +635,20 @@ func DiffZipOffic(file []byte) (string, error) {
 	}
 	return office, nil
 
+}
+
+func GetContentType(b []byte) string {
+	var c string
+	if len(b) < 512 {
+		c = parseContnetType(http.DetectContentType(b))
+	} else {
+		c = parseContnetType(http.DetectContentType(b[:512]))
+
+	}
+	if c == "zip" {
+		kind, _ := filetype.Match(b)
+		c = kind.Extension
+		return c
+	}
+	return c
 }
