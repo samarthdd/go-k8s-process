@@ -19,9 +19,8 @@ import (
 	"github.com/k8-proxy/go-k8s-process/tracing"
 	"github.com/k8-proxy/k8-go-comm/pkg/minio"
 	"github.com/k8-proxy/k8-go-comm/pkg/rabbitmq"
-	min7 "github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/opentracing/opentracing-go"
+	zlog "github.com/rs/zerolog/log"
 	"github.com/streadway/amqp"
 )
 
@@ -208,10 +207,12 @@ func TestProcessMessage(t *testing.T) {
 	log.Println("[√] AMQP Connected successfully")
 	defer connrecive.Close()
 	// now we can instantiate minio client
-	minioClient, err = min7.New(endpoint, &min7.Options{
-		Creds:  credentials.NewStaticV4(minioAccessKey, minioSecretKey, ""),
-		Secure: false,
-	})
+
+	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
+	if err != nil {
+		zlog.Fatal().Err(err).Msg("error could not start minio client ")
+
+	}
 	if err != nil {
 		log.Fatalf("[x] Failed to create minio client error: %s", err)
 		return
@@ -268,7 +269,7 @@ func TestProcessMessage(t *testing.T) {
 	}
 
 	table := amqp.Table{
-		"file-id":              fn,
+		"file-id":              "unittest",
 		"source-presigned-url": sourcePresignedURL.String(),
 		"generate-report":      "true",
 		"request-mode":         "respmod",
@@ -308,8 +309,8 @@ func TestProcessMessage(t *testing.T) {
 				main()
 			})
 		}()
-		time.Sleep(10 * time.Second)
 
+		time.Sleep(10 * time.Second)
 		close(done)
 		<-done
 	})
@@ -344,7 +345,7 @@ func TestProcessMessage(t *testing.T) {
 
 	t.Run("Test_minioUploadProcess", func(t *testing.T) {
 		tablefile := amqp.Table{
-			"file-id":               "id-test.pdf",
+			"file-id":               "unittest.pdf",
 			"clean-presigned-url":   "http://localhost:9000",
 			"rebuilt-file-location": "./reb.pdf",
 			"reply-to":              "replay",
@@ -366,7 +367,7 @@ func TestProcessMessage(t *testing.T) {
 		}{
 			{
 				"minioUploadProcess",
-				args{data, "id-test", "pdf", "header", tablefile},
+				args{data, "fileidtest", "pdf", "header", tablefile},
 			},
 		}
 		for _, tt := range tests {
@@ -407,7 +408,7 @@ func GenerateRandomString(n int) (string, error) {
 
 func TestInject(t *testing.T) {
 	tableout := amqp.Table{
-		"file-id":               "id-test",
+		"file-id":               "fileidtest",
 		"clean-presigned-url":   "http://localhost:9000",
 		"rebuilt-file-location": "./reb.pdf",
 		"reply-to":              "replay",
@@ -452,7 +453,7 @@ func TestInject(t *testing.T) {
 
 func TestExtract(t *testing.T) {
 	tableout := amqp.Table{
-		"file-id":               "id-test",
+		"file-id":               "fileidtest",
 		"clean-presigned-url":   "http://localhost:9000",
 		"rebuilt-file-location": "./reb.pdf",
 		"reply-to":              "replay",
@@ -504,7 +505,7 @@ func TestExtract(t *testing.T) {
 
 func Test_amqpHeadersCarrier_ForeachKey(t *testing.T) {
 	tableout := amqp.Table{
-		"file-id":               "id-test",
+		"file-id":               "fileidtest",
 		"clean-presigned-url":   "http://localhost:9000",
 		"rebuilt-file-location": "./reb.pdf",
 		"reply-to":              "replay",
@@ -546,7 +547,7 @@ func Test_amqpHeadersCarrier_ForeachKey(t *testing.T) {
 
 func TestExtractWithTracer(t *testing.T) {
 	tableout := amqp.Table{
-		"file-id":               "id-test",
+		"file-id":               "fileidtest",
 		"clean-presigned-url":   "http://localhost:9000",
 		"rebuilt-file-location": "./reb.pdf",
 		"reply-to":              "replay",
@@ -621,7 +622,7 @@ func createBucketIfNotExist(bucketName string) error {
 
 func Test_processend(t *testing.T) {
 	tablefile := amqp.Table{
-		"file-id":               "id-test",
+		"file-id":               "fileidtest",
 		"clean-presigned-url":   "http://localhost:9000",
 		"rebuilt-file-location": "./reb.pdf",
 		"reply-to":              "replay",
