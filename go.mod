@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.0 // indirect
 	github.com/go-ini/ini v1.62.0
+	github.com/h2non/filetype v1.1.1
 	github.com/k8-proxy/dockertest/v3 v3.6.7
 	github.com/k8-proxy/k8-go-comm v0.1.5
 	github.com/minio/minio-go/v7 v7.0.10
