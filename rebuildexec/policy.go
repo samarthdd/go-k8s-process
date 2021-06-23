@@ -48,7 +48,7 @@ type XmlConfig struct {
 */
 
 type Pdfcontentmanagement struct {
-	Watermark          json.Number `json:"-" xml:"watermark,omitempty"`
+	Watermark          string      `json:"Watermark" xml:"watermark"`
 	Metadata           json.Number `json:"Metadata" xml:"metadata"`
 	InternalHyperlinks json.Number `json:"InternalHyperlinks" xml:"internal_hyperlinks"`
 	ExternalHyperlinks json.Number `json:"ExternalHyperlinks" xml:"external_hyperlinks"`
